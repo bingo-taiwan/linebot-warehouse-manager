@@ -1,0 +1,248 @@
+<?php
+session_start();
+require_once __DIR__ . '/../config.php';
+$config = require __DIR__ . '/../config.php';
+
+// 簡易驗證
+if (isset($_POST['password'])) {
+    if ($_POST['password'] === $config['db']['mysql']['password']) {
+        $_SESSION['admin_logged_in'] = true;
+    } else {
+        $error = "密碼錯誤";
+    }
+}
+
+if (!isset($_SESSION['admin_logged_in'])) {
+    ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Login - Warehouse Admin</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="d-flex align-items-center justify-content-center vh-100 bg-light">
+        <div class="card p-4 shadow" style="width: 350px;">
+            <h4 class="text-center mb-4">倉管後台登入</h4>
+            <?php if (isset($error)) echo "<div class='alert alert-danger'>$error</div>"; ?>
+            <form method="post">
+                <input type="password" name="password" class="form-control mb-3" placeholder="請輸入管理員密碼" required>
+                <button type="submit" class="btn btn-primary w-100">登入</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+?>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📦 倉儲管理後台</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; color: white; }
+        .nav-link { color: rgba(255,255,255,.75); cursor: pointer; }
+        .nav-link.active { color: white; background-color: rgba(255,255,255,.1); }
+        .alert-row { background-color: #fff3f3; }
+    </style>
+</head>
+<body>
+    <div id="app" class="d-flex">
+        <!-- Sidebar -->
+        <div class="sidebar p-3 d-flex flex-column flex-shrink-0" style="width: 250px;">
+            <h4 class="mb-4 px-2">📦 倉儲管理</h4>
+            <ul class="nav nav-pills flex-column mb-auto">
+                <li class="nav-item">
+                    <a class="nav-link" :class="{active: view === 'dashboard'}" @click="view = 'dashboard'">📊 總覽與預警</a>
+                </li>
+                <li>
+                    <a class="nav-link" :class="{active: view === 'inventory'}" @click="view = 'inventory'">🏭 庫存管理</a>
+                </li>
+                <li>
+                    <a class="nav-link" :class="{active: view === 'reports'}" @click="view = 'reports'">📑 報表中心</a>
+                </li>
+            </ul>
+            <div class="mt-auto p-2 text-white-50 small">Version 1.0</div>
+        </div>
+
+        <!-- Content -->
+        <div class="flex-grow-1 p-4 bg-light overflow-auto" style="height: 100vh;">
+            
+            <!-- Dashboard View -->
+            <div v-if="view === 'dashboard'">
+                <h3 class="mb-4">儀表板</h3>
+                <div class="row g-4 mb-4">
+                    <div class="col-md-4">
+                        <div class="card p-3 border-start border-4 border-primary">
+                            <div class="text-muted small">總品項數</div>
+                            <div class="fs-2 fw-bold">{{ stats.products_count }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 border-start border-4 border-warning">
+                            <div class="text-muted small">待處理訂單</div>
+                            <div class="fs-2 fw-bold">{{ stats.pending_orders }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-3 border-start border-4 border-danger">
+                            <div class="text-muted small">庫存預警</div>
+                            <div class="fs-2 fw-bold text-danger">{{ stats.alert_count }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="alerts.length > 0" class="card">
+                    <div class="card-header bg-danger text-white fw-bold">⚠️ 低庫存警示</div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0">
+                            <thead><tr><th>倉庫</th><th>產品</th><th>目前庫存</th><th>安全水位</th></tr></thead>
+                            <tbody>
+                                <tr v-for="a in alerts">
+                                    <td><span class="badge" :class="a.type==='DAYUAN'?'bg-primary':'bg-success'">{{ a.type==='DAYUAN'?'大園':'台北' }}</span></td>
+                                    <td>{{ a.product }}</td>
+                                    <td class="fw-bold text-danger">{{ a.current }}</td>
+                                    <td class="text-muted">{{ a.threshold }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory View -->
+            <div v-if="view === 'inventory'">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>即時庫存</h3>
+                    <div class="d-flex gap-2">
+                        <select v-model="filterCategory" class="form-select form-select-sm" style="width: 150px;">
+                            <option value="ALL">全部類別</option>
+                            <option value="產品">產品</option>
+                            <option value="包材">包材</option>
+                            <option value="雜項">雜項</option>
+                        </select>
+                        <button class="btn btn-sm btn-outline-primary" @click="fetchData">🔄 刷新</button>
+                    </div>
+                </div>
+                
+                <!-- Debug Info -->
+                <div class="alert alert-info py-1 px-2 mb-2 small">
+                    共載入 {{ inventory.length }} 筆資料。
+                    <span v-if="inventory.length > 0">最後一筆: {{ inventory[inventory.length-1].name }}</span>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <table class="table table-striped mb-0 align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>產品名稱</th>
+                                    <th>類別</th>
+                                    <th>規格</th>
+                                    <th class="text-center">大園倉 (箱)</th>
+                                    <th class="text-center">台北倉 (散)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="p in filteredInventory" :key="p.id">
+                                    <td class="fw-bold">{{ p.name }}</td>
+                                    <td><span class="badge bg-secondary">{{ p.category }}</span></td>
+                                    <td class="text-muted small">{{ p.spec }}</td>
+                                    <td class="text-center" :class="{'text-danger fw-bold': parseInt(p.dayuan_stock) < parseInt(p.alert_threshold_cases)}">
+                                        {{ p.dayuan_stock }}
+                                    </td>
+                                    <td class="text-center" :class="{'text-danger fw-bold': parseInt(p.taipei_stock) < parseInt(p.alert_threshold_units)}">
+                                        {{ p.taipei_stock }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div v-if="view === 'reports'">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>訂單紀錄</h3>
+                    <a href="api/get_orders.php?format=csv" target="_blank" class="btn btn-success">📥 匯出 Excel (CSV)</a>
+                </div>
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0">
+                            <thead><tr><th>#</th><th>類型</th><th>申請人</th><th>內容</th><th>狀態</th><th>時間</th></tr></thead>
+                            <tbody>
+                                <tr v-for="o in orders" :key="o.id">
+                                    <td>{{ o.id }}</td>
+                                    <td><span class="badge bg-secondary">{{ o.order_type }}</span></td>
+                                    <td>{{ o.requester_name }}</td>
+                                    <td class="small text-truncate" style="max-width: 200px;">{{ o.items_display }}</td>
+                                    <td>
+                                        <span class="badge" :class="statusClass(o.status)">{{ o.status }}</span>
+                                    </td>
+                                    <td class="small">{{ o.created_at }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const view = ref('dashboard');
+                const stats = ref({});
+                const inventory = ref([]);
+                const alerts = ref([]);
+                const orders = ref([]);
+                const filterCategory = ref('ALL');
+
+                const filteredInventory = computed(() => {
+                    if (filterCategory.value === 'ALL') return inventory.value;
+                    return inventory.value.filter(p => p.category === filterCategory.value);
+                });
+
+                const fetchData = async () => {
+                    // Get Stats & Inventory
+                    const res1 = await fetch('api/get_dashboard_stats.php');
+                    const json1 = await res1.json();
+                    if (json1.success) {
+                        stats.value = json1.stats;
+                        inventory.value = json1.inventory;
+                        alerts.value = json1.alerts;
+                    }
+
+                    // Get Orders
+                    const res2 = await fetch('api/get_orders.php');
+                    const json2 = await res2.json();
+                    if (json2.success) {
+                        orders.value = json2.data;
+                    }
+                };
+
+                const statusClass = (s) => {
+                    if (s === 'PENDING') return 'bg-warning text-dark';
+                    if (s === 'RECEIVED') return 'bg-success';
+                    return 'bg-secondary';
+                };
+
+                onMounted(fetchData);
+                // Auto refresh every 60s
+                setInterval(fetchData, 60000);
+
+                return { view, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

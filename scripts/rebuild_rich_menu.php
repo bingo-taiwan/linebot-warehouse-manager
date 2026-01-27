@@ -6,21 +6,22 @@
 require_once '/home/lt4.mynet.com.tw/public_html/linebot/warehouse/config.php';
 $config = require '/home/lt4.mynet.com.tw/public_html/linebot/warehouse/config.php';
 
-$menuId = 'richmenu-ed4cd3e905643beded3fe3516a1921de'; // Current ID to delete
+$menuId = 'richmenu-cf6f66a525c156eeb3dd326dc3dfcd21'; // Current V3 ID to delete
 $liffUrlAddStock = 'https://liff.line.me/2008988832-qQ0xjwL8';
 $liffUrlBenefit = 'https://liff.line.me/2008988832-TPY6jyIR';
+$liffUrlRestock = 'https://liff.line.me/2008988832-PuJ7aR9I';
 
 // 定義新的 ADMIN_WAREHOUSE 選單結構
 $updatedMenu = [
     'size' => ['width' => 2500, 'height' => 1686],
     'selected' => true,
-    'name' => 'Warehouse_Admin_Menu_V3',
+    'name' => 'Warehouse_Admin_Menu_V4',
     'chatBarText' => '選單',
     'areas' => [
         ['bounds' => ['x' => 0, 'y' => 0, 'width' => 1250, 'height' => 843], 'action' => ['type' => 'postback', 'data' => 'action=view_stock&wh=DAYUAN', 'label' => '大園庫存']],
         ['bounds' => ['x' => 1250, 'y' => 0, 'width' => 1250, 'height' => 843], 'action' => ['type' => 'postback', 'data' => 'action=view_stock&wh=TAIPEI', 'label' => '台北庫存']],
         ['bounds' => ['x' => 0, 'y' => 843, 'width' => 833, 'height' => 843], 'action' => ['type' => 'uri', 'uri' => $liffUrlAddStock, 'label' => '新品入庫']],
-        ['bounds' => ['x' => 833, 'y' => 843, 'width' => 833, 'height' => 843], 'action' => ['type' => 'postback', 'data' => 'action=order_dayuan', 'label' => '下單大園']],
+        ['bounds' => ['x' => 833, 'y' => 843, 'width' => 833, 'height' => 843], 'action' => ['type' => 'uri', 'uri' => $liffUrlRestock, 'label' => '下單大園']],
         ['bounds' => ['x' => 1666, 'y' => 843, 'width' => 834, 'height' => 843], 'action' => ['type' => 'uri', 'uri' => $liffUrlBenefit, 'label' => '福利品']],
     ]
 ];
