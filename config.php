@@ -6,6 +6,7 @@
  */
 
 return [
+    'bot_id' => 'warehouse',
     // === LINE Messaging API ===
     'line' => [
         'channel_id' => '2008987597',

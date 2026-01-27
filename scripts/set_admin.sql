@@ -1,0 +1,3 @@
+INSERT INTO users (line_user_id, name, role) 
+VALUES ('U004f8cad542e37c7834a3920e60d1077', '超級管理員', 'ADMIN_WAREHOUSE') 
+ON DUPLICATE KEY UPDATE role='ADMIN_WAREHOUSE';

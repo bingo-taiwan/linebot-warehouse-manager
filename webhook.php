@@ -15,7 +15,7 @@ ini_set('error_log', $errorLog);
 
 // 記錄原始請求
 $content = file_get_contents('php://input');
-file_put_contents($logFile, date('[Y-m-d H:i:s] START ') . $content . "\n", FILE_APPEND);
+file_put_contents($logFile, '[' . date('Y-m-d H:i:s') . '] [START] ' . $content . "\n", FILE_APPEND);
 
 try {
     require_once '/home/lt4.mynet.com.tw/linebot_core/LineBot.php';
@@ -26,6 +26,7 @@ try {
 
     // 1. 初始化
     $lineBot = new LineBot($config['line']);
+    $lineBot->setDebug(true, $logFile); // Enable debug logging to the same file
     $analytics = new Analytics($config['bot_id'], __DIR__ . '/data');
 
     // 2. 解析事件
