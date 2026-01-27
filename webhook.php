@@ -3,21 +3,57 @@
  * LineBot Webhook Entry Point
  */
 
-require_once __DIR__ . '/config.php';
-// 暫時還沒有 LineBot SDK，先用原生 PHP 處理
+// 開啟錯誤顯示 (除錯用)
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
 
-// 1. 取得 POST 資料
+// 設定 Log 檔案
+$logFile = __DIR__ . '/data/webhook.log';
+$errorLog = __DIR__ . '/data/php_error.log';
+ini_set('error_log', $errorLog);
+
+// 記錄原始請求
 $content = file_get_contents('php://input');
-$signature = $_SERVER['HTTP_X_LINE_SIGNATURE'] ?? '';
+file_put_contents($logFile, date('[Y-m-d H:i:s] START ') . $content . "\n", FILE_APPEND);
 
-// 2. 記錄 Log (方便除錯)
-file_put_contents(__DIR__ . '/data/webhook.log', date('[Y-m-d H:i:s] ') . $content . "\n", FILE_APPEND);
+try {
+    require_once '/home/lt4.mynet.com.tw/linebot_core/LineBot.php';
+    require_once '/home/lt4.mynet.com.tw/linebot_core/Analytics.php';
+    require_once '/home/lt4.mynet.com.tw/linebot_core/helpers.php';
+    
+    $config = require __DIR__ . '/config.php';
 
-// 3. 簡單回應 OK
-http_response_code(200);
-echo 'OK';
+    // 1. 初始化
+    $lineBot = new LineBot($config['line']);
+    $analytics = new Analytics($config['bot_id'], __DIR__ . '/data');
 
-// TODO: 驗證簽名、解析 JSON、分發事件
-// $events = json_decode($content, true)['events'];
-// foreach ($events as $event) { ... }
+    // 2. 解析事件
+    $data = json_decode($content, true);
+    if (empty($data['events'])) {
+        echo 'OK (No events)';
+        exit;
+    }
 
+    foreach ($data['events'] as $event) {
+        // 記錄統計
+        $analytics->logWebhook(
+            $event['source']['userId'] ?? 'unknown',
+            $event['type'],
+            ['timestamp' => $event['timestamp']]
+        );
+
+        // 載入 MainHandler
+        require_once __DIR__ . '/handlers/MainHandler.php';
+        $handler = new MainHandler($lineBot, $config);
+        $handler->handle($event);
+    }
+
+    echo 'OK';
+
+} catch (Throwable $e) {
+    // 捕捉所有錯誤並記錄
+    file_put_contents($logFile, date('[Y-m-d H:i:s] ERROR: ') . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n", FILE_APPEND);
+    http_response_code(500);
+    echo 'Error';
+}
