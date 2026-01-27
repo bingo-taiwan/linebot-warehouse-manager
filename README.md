@@ -10,7 +10,9 @@
 
 ## 技術架構 (符合 LineBot Architecture 憲法)
 - **核心封裝**：使用 `linebot_core` 進行 API 調用。
-- **資料庫**：SQLite (開發期) / MySQL (正式環境)。
+- **資料庫**：
+  - **開發期**：SQLite (位於 `/data/warehouse.sqlite`)。
+  - **生產環境 (TODO)**：預計切換回 **MySQL (MariaDB)**。程式碼需保持 PDO 抽象化以利切換。
 - **介面**：LINE Flex Message (查詢結果) + LIFF (複雜表單)。
 
 ## 目錄結構

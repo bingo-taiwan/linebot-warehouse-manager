@@ -14,9 +14,19 @@ return [
     ],
 
     // === Database Settings ===
+    // 開發期使用 SQLite，生產環境請切換為 mysql 並填入正確憑證
     'db' => [
-        'type' => 'sqlite',
-        'path' => __DIR__ . '/data/warehouse.sqlite',
+        'driver' => 'mysql', // 選項: 'sqlite', 'mysql'
+        'sqlite' => [
+            'path' => __DIR__ . '/data/warehouse.sqlite',
+        ],
+        'mysql' => [
+            'host' => 'localhost',
+            'database' => 'warehouse',
+            'username' => 'linebot_wh',
+            'password' => 'warehouse_pass_2026',
+            'charset' => 'utf8mb4',
+        ],
     ],
 
     // === Role Definitions ===
