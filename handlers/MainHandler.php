@@ -30,7 +30,7 @@ class MainHandler {
 
         if (!$user) {
             $this->lineBot->reply($event['replyToken'], [
-                ['type' => 'text', 'text' => "⚠️ 您的身份尚未核准。\n\n請將以下 ID 提供給管理員：\n" . $userId]
+                ['type' => 'text', 'text' => "⚠️ 您的身份尚未核准.\n\n請將以下 ID 提供給管理員：\n" . $userId]
             ]);
             return;
         }
@@ -68,7 +68,6 @@ class MainHandler {
         $action = $query['action'] ?? '';
 
         if ($action === 'view_stock') {
-            // 檢查權限：只有 ADMIN_WAREHOUSE 或 ADMIN_OFFICE 可以看詳細庫存
             if (in_array($user['role'], ['ADMIN_WAREHOUSE', 'ADMIN_OFFICE'])) {
                 $wh = $query['wh'] ?? 'DAYUAN';
                 $this->replyStockDetail($event['replyToken'], $wh);
@@ -77,6 +76,61 @@ class MainHandler {
                     ['type' => 'text', 'text' => "抱歉，您沒有權限查看明細。"]
                 ]);
             }
+        } elseif ($action === 'confirm_receipt') {
+            $this->handleConfirmReceipt($event, $user, $query['order_id']);
+        }
+    }
+
+    private function handleConfirmReceipt($event, $user, $orderId) {
+        try {
+            $this->pdo->beginTransaction();
+
+            // 1. 檢查訂單狀態
+            $stmt = $this->pdo->prepare("SELECT * FROM orders WHERE id = ? AND status = 'PENDING'");
+            $stmt->execute([$orderId]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$order) {
+                $this->lineBot->replyText($event['replyToken'], "❌ 該訂單已處理或不存在。");
+                $this->pdo->rollBack();
+                return;
+            }
+
+            // 2. 解析品項並扣除台北倉庫存 (扣散數 unit_count)
+            $items = json_decode($order['items_json'], true);
+            foreach ($items as $item) {
+                $pid = $item['product_id'];
+                $qty = $item['quantity']; // 這裡是散數
+
+                // 優先扣除台北倉效期最接近的
+                $stockStmt = $this->pdo->prepare("SELECT id, unit_count FROM stocks WHERE product_id = ? AND warehouse_id = 'TAIPEI' AND unit_count > 0 ORDER BY expiry_date ASC");
+                $stockStmt->execute([$pid]);
+                $rows = $stockStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $remainingToDeduct = $qty;
+                foreach ($rows as $stockRow) {
+                    if ($remainingToDeduct <= 0) break;
+                    $deduct = min($stockRow['unit_count'], $remainingToDeduct);
+                    $updateStmt = $this->pdo->prepare("UPDATE stocks SET unit_count = unit_count - ? WHERE id = ?");
+                    $updateStmt->execute([$deduct, $stockRow['id']]);
+                    $remainingToDeduct -= $deduct;
+                }
+
+                if ($remainingToDeduct > 0) {
+                    throw new Exception("台北倉產品(ID:{$pid})庫存不足，無法完成簽收。");
+                }
+            }
+
+            // 3. 更新訂單狀態
+            $updateOrder = $this->pdo->prepare("UPDATE orders SET status = 'RECEIVED', receive_date = CURDATE() WHERE id = ?");
+            $updateOrder->execute([$orderId]);
+
+            $this->pdo->commit();
+            $this->lineBot->replyText($event['replyToken'], "✅ 簽收成功！已扣除台北倉散貨庫存。");
+
+        } catch (Exception $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            $this->lineBot->replyText($event['replyToken'], "⚠️ 簽收失敗：" . $e->getMessage());
         }
     }
 
@@ -87,8 +141,8 @@ class MainHandler {
     }
 
     private function replyStockSummary($replyToken) {
-        // 從資料庫抓取簡易統計
-        $stmt = $this->pdo->query("SELECT warehouse_id, COUNT(*) as count, SUM(case_count) as total_cases FROM stocks GROUP BY warehouse_id");
+        // 從資料庫抓取簡易統計 (注意：台北倉現在是 unit_count)
+        $stmt = $this->pdo->query("SELECT warehouse_id, COUNT(*) as count, SUM(case_count) as total_cases, SUM(unit_count) as total_units FROM stocks GROUP BY warehouse_id");
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         $bodyContents = [
@@ -98,10 +152,14 @@ class MainHandler {
 
         foreach ($rows as $row) {
             $whName = ($row['warehouse_id'] === 'DAYUAN') ? '大園倉' : '台北倉';
+            $qtyDisplay = ($row['warehouse_id'] === 'DAYUAN') 
+                ? $row['total_cases'] . " 箱" 
+                : $row['total_units'] . " 散";
+
             $bodyContents[] = FlexBuilder::hbox([
                 FlexBuilder::text($whName, ['weight' => 'bold', 'flex' => 1]),
                 FlexBuilder::text($row['count'] . " 品項", ['align' => 'end', 'color' => '#666666']),
-                FlexBuilder::text($row['total_cases'] . " 箱", ['align' => 'end', 'weight' => 'bold', 'flex' => 1])
+                FlexBuilder::text($qtyDisplay, ['align' => 'end', 'weight' => 'bold', 'flex' => 1])
             ], ['margin' => 'md']);
             
             $bodyContents[] = FlexBuilder::button(
@@ -116,7 +174,7 @@ class MainHandler {
     }
 
     private function replyStockDetail($replyToken, $warehouseId) {
-        $stmt = $this->pdo->prepare("SELECT p.name, s.case_count, s.expiry_date FROM stocks s JOIN products p ON s.product_id = p.id WHERE s.warehouse_id = ?");
+        $stmt = $this->pdo->prepare("SELECT p.name, s.case_count, s.unit_count, s.expiry_date, p.spec FROM stocks s JOIN products p ON s.product_id = p.id WHERE s.warehouse_id = ?");
         $stmt->execute([$warehouseId]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -134,10 +192,18 @@ class MainHandler {
                 $isExpired = (strtotime($row['expiry_date']) < time());
                 $expiryColor = $isExpired ? '#FF0000' : '#666666';
                 
+                // 根據倉庫顯示不同單位
+                if ($warehouseId === 'DAYUAN') {
+                    $qtyText = $row['case_count'] . " 箱";
+                } else {
+                    $unit = (strpos($row['spec'], '包') !== false) ? '包' : '盒';
+                    $qtyText = $row['unit_count'] . " " . $unit;
+                }
+
                 $itemBox = FlexBuilder::vbox([
                     FlexBuilder::hbox([
                         FlexBuilder::text($row['name'], ['weight' => 'bold', 'wrap' => true, 'flex' => 3]),
-                        FlexBuilder::text($row['case_count'] . " 箱", ['align' => 'end', 'weight' => 'bold', 'flex' => 1])
+                        FlexBuilder::text($qtyText, ['align' => 'end', 'weight' => 'bold', 'flex' => 2])
                     ]),
                     FlexBuilder::text("效期: " . ($row['expiry_date'] ?? '無'), ['size' => 'xs', 'color' => $expiryColor])
                 ], ['margin' => 'md']);

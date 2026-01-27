@@ -77,3 +77,15 @@ Remove-Item -Path 'C:\100.90.117.31' -Recurse -Force
 - **此檔案**: `X:\gemini\GEMINI.md`（NAS 共用，兩地 symlink 到 `~/.gemini/GEMINI.md`）
 - **環境狀態**: `X:\gemini\AI_ENV.md`（PowerShell profile 自動更新）
 - **環境 JSON**: `X:\gemini\env_status.json`（程式可讀的環境狀態）
+
+## 倉管小幫手 (Warehouse Bot) 專案資訊
+- **GitHub**: https://github.com/bingo-taiwan/linebot-warehouse-manager
+- **伺服器路徑**: `/home/lt4.mynet.com.tw/public_html/linebot/warehouse/`
+- **資料庫**: MySQL `warehouse`
+  - 帳號: `linebot_wh`
+  - 密碼: `warehouse_pass_2026` (LT4 root: `sc4...CLh`)
+- **LIFF**:
+  - 新品入庫: `2008988832-qQ0xjwL8` -> `https://lt4.mynet.com.tw/linebot/warehouse/liff/add_stock.php`
+- **Rich Menu**:
+  - 管理員選單 ID: `richmenu-ed4cd3e905643beded3fe3516a1921de`
+
