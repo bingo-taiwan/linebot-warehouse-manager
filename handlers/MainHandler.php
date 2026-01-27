@@ -96,29 +96,85 @@ class MainHandler {
                 return;
             }
 
-            // 2. 解析品項並扣除台北倉庫存 (扣散數 unit_count)
             $items = json_decode($order['items_json'], true);
-            foreach ($items as $item) {
-                $pid = $item['product_id'];
-                $qty = $item['quantity']; // 這裡是散數
 
-                // 優先扣除台北倉效期最接近的
-                $stockStmt = $this->pdo->prepare("SELECT id, unit_count FROM stocks WHERE product_id = ? AND warehouse_id = 'TAIPEI' AND unit_count > 0 ORDER BY expiry_date ASC");
-                $stockStmt->execute([$pid]);
-                $rows = $stockStmt->fetchAll(PDO::FETCH_ASSOC);
+            // 2. 根據訂單類型執行不同扣庫邏輯
+            if ($order['order_type'] === 'BENEFIT_ORDER') {
+                // 福利品：扣除台北倉散貨
+                foreach ($items as $item) {
+                    $pid = $item['product_id'];
+                    $qty = $item['quantity']; // 散數
 
-                $remainingToDeduct = $qty;
-                foreach ($rows as $stockRow) {
-                    if ($remainingToDeduct <= 0) break;
-                    $deduct = min($stockRow['unit_count'], $remainingToDeduct);
-                    $updateStmt = $this->pdo->prepare("UPDATE stocks SET unit_count = unit_count - ? WHERE id = ?");
-                    $updateStmt->execute([$deduct, $stockRow['id']]);
-                    $remainingToDeduct -= $deduct;
+                    // 優先扣除台北倉效期最接近的
+                    $stockStmt = $this->pdo->prepare("SELECT id, unit_count FROM stocks WHERE product_id = ? AND warehouse_id = 'TAIPEI' AND unit_count > 0 ORDER BY expiry_date ASC");
+                    $stockStmt->execute([$pid]);
+                    $rows = $stockStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $remainingToDeduct = $qty;
+                    foreach ($rows as $stockRow) {
+                        if ($remainingToDeduct <= 0) break;
+                        $deduct = min($stockRow['unit_count'], $remainingToDeduct);
+                        $updateStmt = $this->pdo->prepare("UPDATE stocks SET unit_count = unit_count - ? WHERE id = ?");
+                        $updateStmt->execute([$deduct, $stockRow['id']]);
+                        $remainingToDeduct -= $deduct;
+                    }
+
+                    if ($remainingToDeduct > 0) {
+                        throw new Exception("台北倉產品(ID:{$pid})庫存不足，無法完成簽收。");
+                    }
                 }
+                $successMsg = "✅ 福利品簽收成功！已扣除台北倉庫存。";
 
-                if ($remainingToDeduct > 0) {
-                    throw new Exception("台北倉產品(ID:{$pid})庫存不足，無法完成簽收。");
+            } elseif ($order['order_type'] === 'DAYUAN_ORDER') {
+                // 大園補貨：扣除大園箱數 -> 增加台北散數
+                foreach ($items as $item) {
+                    $pid = $item['product_id'];
+                    $qty = $item['quantity']; // 箱數
+
+                    // 1. 取得換算率
+                    $prodStmt = $this->pdo->prepare("SELECT unit_per_case FROM products WHERE id = ?");
+                    $prodStmt->execute([$pid]);
+                    $unitPerCase = $prodStmt->fetchColumn();
+
+                    // 2. 扣除大園庫存 (FIFO)
+                    $stockStmt = $this->pdo->prepare("SELECT id, case_count, expiry_date, production_date FROM stocks WHERE product_id = ? AND warehouse_id = 'DAYUAN' AND case_count > 0 ORDER BY expiry_date ASC");
+                    $stockStmt->execute([$pid]);
+                    $batches = $stockStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $remainingToDeduct = $qty;
+                    foreach ($batches as $batch) {
+                        if ($remainingToDeduct <= 0) break;
+
+                        $deduct = min($batch['case_count'], $remainingToDeduct);
+                        
+                        // 更新大園庫存
+                        $updateSrc = $this->pdo->prepare("UPDATE stocks SET case_count = case_count - ? WHERE id = ?");
+                        $updateSrc->execute([$deduct, $batch['id']]);
+
+                        // 3. 增加台北庫存 (散數)
+                        // 嘗試尋找台北倉相同效期的批次，若有則合併，無則新增
+                        $destStmt = $this->pdo->prepare("SELECT id FROM stocks WHERE product_id = ? AND warehouse_id = 'TAIPEI' AND expiry_date = ?");
+                        $destStmt->execute([$pid, $batch['expiry_date']]);
+                        $destId = $destStmt->fetchColumn();
+
+                        $unitsToAdd = $deduct * $unitPerCase;
+
+                        if ($destId) {
+                            $updateDest = $this->pdo->prepare("UPDATE stocks SET unit_count = unit_count + ? WHERE id = ?");
+                            $updateDest->execute([$unitsToAdd, $destId]);
+                        } else {
+                            $insertDest = $this->pdo->prepare("INSERT INTO stocks (warehouse_id, product_id, unit_count, expiry_date, production_date, note) VALUES (?, ?, ?, ?, ?, ?)");
+                            $insertDest->execute(['TAIPEI', $pid, $unitsToAdd, $batch['expiry_date'], $batch['production_date'], '大園調撥']);
+                        }
+
+                        $remainingToDeduct -= $deduct;
+                    }
+
+                    if ($remainingToDeduct > 0) {
+                        throw new Exception("大園倉產品(ID:{$pid})庫存不足，無法完成調撥。");
+                    }
                 }
+                $successMsg = "✅ 補貨簽收成功！已從大園倉扣除並入庫至台北倉。";
             }
 
             // 3. 更新訂單狀態
@@ -126,7 +182,7 @@ class MainHandler {
             $updateOrder->execute([$orderId]);
 
             $this->pdo->commit();
-            $this->lineBot->replyText($event['replyToken'], "✅ 簽收成功！已扣除台北倉散貨庫存。");
+            $this->lineBot->replyText($event['replyToken'], $successMsg);
 
         } catch (Exception $e) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
