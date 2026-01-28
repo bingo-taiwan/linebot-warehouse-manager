@@ -85,6 +85,13 @@ try {
         }
     }
 
+    // 將「我」移到第一位
+    usort($dashboard, function($a, $b) {
+        if ($a['isMe']) return -1;
+        if ($b['isMe']) return 1;
+        return 0; // 其他人維持原順序
+    });
+
     echo json_encode([
         'success' => true,
         'dashboard' => $dashboard,
