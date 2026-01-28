@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config.php';
     <title>🎁 福利品自選 - 倉管小幫手</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { background-color: #f0f2f5; padding-bottom: 100px; }
         .product-card { border-radius: 12px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s; }
@@ -145,18 +146,25 @@ require_once __DIR__ . '/../config.php';
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ items: orderItems })
                         });
-                        const res = await resp.json();
-                        if (res.success) {
-                            alert('✅ 訂單已送出！請等待倉管人員確認。');
-                            liff.closeWindow();
-                        } else {
-                            alert('❌ 失敗：' + res.message);
-                        }
-                    } catch (err) {
-                        alert('網路異常，請稍後再試');
-                    } finally {
-                        submitting.value = false;
+                    const result = await resp.json();
+                    if (result.success) {
+                        await Swal.fire({
+                            title: 'AURUMA',
+                            text: '✅ 訂單已送出！請等待倉管人員確認。',
+                            icon: 'success',
+                            confirmButtonColor: '#00B900'
+                        });
+                        liff.closeWindow();
+                    } else {
+                        Swal.fire('AURUMA', '❌ 失敗：' + result.message, 'error');
+                        btn.disabled = false;
+                        btn.innerText = '送出訂單';
                     }
+                } catch (err) {
+                    Swal.fire('AURUMA', '❌ 網路異常，請稍後再試', 'error');
+                    btn.disabled = false;
+                    btn.innerText = '送出訂單';
+                }
                 };
 
                 const getEmoji = (cat) => {

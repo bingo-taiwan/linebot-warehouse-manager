@@ -11,6 +11,7 @@ require_once __DIR__ . '/../config.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📦 新品入庫 - 倉管小幫手</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { background-color: #f8f9fa; font-family: sans-serif; }
         .form-container { max-width: 500px; margin: 20px auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
@@ -72,12 +73,9 @@ require_once __DIR__ . '/../config.php';
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
         async function main() {
-            // 初始化 LIFF
             try {
                 await liff.init({ liffId: "2008988832-qQ0xjwL8" });
-            } catch (err) {
-                console.error("LIFF Init Error", err);
-            }
+            } catch (err) {}
             
             document.getElementById('stockForm').onsubmit = async (e) => {
                 e.preventDefault();
@@ -97,15 +95,20 @@ require_once __DIR__ . '/../config.php';
                     const result = await resp.json();
                     
                     if (result.success) {
-                        alert('✅ 入庫成功！');
+                        await Swal.fire({
+                            title: 'AURUMA',
+                            text: '✅ 入庫成功！',
+                            icon: 'success',
+                            confirmButtonColor: '#00B900'
+                        });
                         liff.closeWindow();
                     } else {
-                        alert('❌ 錯誤：' + result.message);
+                        Swal.fire('AURUMA', '❌ 錯誤：' + result.message, 'error');
                         btn.disabled = false;
                         btn.innerText = '確認送出';
                     }
                 } catch (err) {
-                    alert('❌ 網路錯誤，請稍後再試');
+                    Swal.fire('AURUMA', '❌ 網路錯誤，請稍後再試', 'error');
                     btn.disabled = false;
                     btn.innerText = '確認送出';
                 }

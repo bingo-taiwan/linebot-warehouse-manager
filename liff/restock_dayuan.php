@@ -12,6 +12,7 @@ require_once __DIR__ . '/../config.php';
     <title>🚛 大園補貨 - 倉管小幫手</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { background-color: #f0f2f5; padding-bottom: 100px; }
         .card { border: none; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
@@ -119,7 +120,7 @@ require_once __DIR__ . '/../config.php';
                             products.value = json.data;
                         }
                     } catch (e) {
-                        alert('載入失敗');
+                        Swal.fire('AURUMA', '載入失敗', 'error');
                     } finally {
                         loading.value = false;
                     }
@@ -130,7 +131,7 @@ require_once __DIR__ . '/../config.php';
                     const next = current + delta;
                     if (next < 0) return;
                     if (next > item.dayuan_cases) {
-                        alert('大園庫存不足！');
+                        Swal.fire('AURUMA', '大園庫存不足！', 'warning');
                         return;
                     }
                     if (next === 0) delete cart.value[item.id];
@@ -138,7 +139,16 @@ require_once __DIR__ . '/../config.php';
                 };
 
                 const submitRestock = async () => {
-                    if (!confirm(`確認要調撥共 ${totalCases.value} 箱產品到台北倉嗎？`)) return;
+                    const confirmRes = await Swal.fire({
+                        title: 'AURUMA',
+                        text: `確認要調撥共 ${totalCases.value} 箱產品到台北倉嗎？`,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: '確定',
+                        cancelButtonText: '取消'
+                    });
+                    
+                    if (!confirmRes.isConfirmed) return;
                     
                     submitting.value = true;
                     try {
@@ -155,13 +165,13 @@ require_once __DIR__ . '/../config.php';
                         const json = await res.json();
                         
                         if (json.success) {
-                            alert('✅ 調撥完成！台北倉庫存已更新。');
+                            await Swal.fire('AURUMA', '✅ 訂單已送出！請等待倉管人員備貨。', 'success');
                             liff.closeWindow();
                         } else {
-                            alert('❌ 失敗：' + json.message);
+                            Swal.fire('AURUMA', '❌ 失敗：' + json.message, 'error');
                         }
                     } catch (e) {
-                        alert('網路錯誤');
+                        Swal.fire('AURUMA', '網路錯誤', 'error');
                     } finally {
                         submitting.value = false;
                     }
@@ -169,7 +179,6 @@ require_once __DIR__ . '/../config.php';
 
                 onMounted(async () => {
                     await fetchData();
-                    // 請填入第三組 LIFF ID (補貨專用)
                     try { await liff.init({ liffId: "2008988832-PuJ7aR9I" }); } catch (e) {}
                 });
 

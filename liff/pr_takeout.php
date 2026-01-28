@@ -7,6 +7,7 @@
     <title>🏢 公關品取貨 - 倉管小幫手</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { background-color: #f8f9fa; padding-bottom: 100px; }
         .card { border-radius: 12px; border: none; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
@@ -62,10 +63,12 @@
 
                 const fetchData = async () => {
                     try {
-                        const res = await fetch('api_get_products.php'); // 重用獲取產品 API
+                        const res = await fetch('api_get_products.php');
                         const json = await res.json();
                         if (json.success) products.value = json.data;
-                    } catch (e) {} finally { loading.value = false; }
+                    } catch (e) {
+                        Swal.fire('AURUMA', '載入失敗', 'error');
+                    } finally { loading.value = false; }
                 };
 
                 const updateQty = (id, delta, max) => {
@@ -79,7 +82,17 @@
                 const getUnit = (spec) => spec && spec.includes('包') ? '包' : '盒';
 
                 const submit = async () => {
-                    if (!confirm('確認取貨？將直接扣除庫存。')) return;
+                    const confirmRes = await Swal.fire({
+                        title: 'AURUMA',
+                        text: '確認取貨？將直接扣除庫存。',
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: '確定',
+                        cancelButtonText: '取消'
+                    });
+                    
+                    if (!confirmRes.isConfirmed) return;
+                    
                     submitting.value = true;
                     try {
                         const items = Object.entries(cart.value).map(([id, qty]) => ({ product_id: id, quantity: qty }));
@@ -90,13 +103,13 @@
                         });
                         const json = await res.json();
                         if (json.success) {
-                            alert('✅ 取貨完成！庫存已扣除。');
+                            await Swal.fire('AURUMA', '✅ 取貨完成！庫存已扣除。', 'success');
                             liff.closeWindow();
                         } else {
-                            alert('❌ 失敗：' + json.message);
+                            Swal.fire('AURUMA', '❌ 失敗：' + json.message, 'error');
                         }
                     } catch (e) {
-                        alert('網路錯誤');
+                        Swal.fire('AURUMA', '網路錯誤', 'error');
                     } finally {
                         submitting.value = false;
                     }
