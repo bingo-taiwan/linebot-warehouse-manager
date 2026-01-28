@@ -65,8 +65,11 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 <li>
                     <a class="nav-link" :class="{active: view === 'reports'}" @click="view = 'reports'">📑 報表中心</a>
                 </li>
+                <li>
+                    <a class="nav-link" :class="{active: view === 'benefit'}" @click="view = 'benefit'">🎁 福利品紀錄</a>
+                </li>
             </ul>
-            <div class="mt-auto p-2 text-white-50 small">Version 1.0</div>
+            <div class="mt-auto p-2 text-white-50 small">Version 1.1</div>
         </div>
 
         <!-- Content -->
@@ -192,6 +195,44 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 </div>
             </div>
 
+            <!-- Benefit View -->
+            <div v-if="view === 'benefit'">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>🎁 福利品紀錄</h3>
+                    <div class="d-flex gap-2">
+                        <input type="month" v-model="benefitMonth" class="form-control" @change="fetchBenefitLogs">
+                        <button class="btn btn-sm btn-outline-primary" @click="fetchBenefitLogs">🔄 刷新</button>
+                    </div>
+                </div>
+                <div class="card shadow-sm">
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light"><tr><th>下單時間</th><th>員工</th><th>領取內容</th><th class="text-end">總金額</th><th class="text-center">狀態</th><th>領取日</th></tr></thead>
+                            <tbody>
+                                <tr v-for="log in benefitLogs" :key="log.id">
+                                    <td class="small">{{ log.date }}</td>
+                                    <td class="fw-bold">{{ log.staff }}</td>
+                                    <td class="small text-muted">{{ log.details }}</td>
+                                    <td class="text-end fw-bold text-success">${{ log.amount.toLocaleString() }}</td>
+                                    <td class="text-center"><span class="badge" :class="statusClass(log.status)">{{ log.status }}</span></td>
+                                    <td class="small text-center">{{ log.receive_date }}</td>
+                                </tr>
+                                <tr v-if="benefitLogs.length === 0">
+                                    <td colspan="6" class="text-center py-4 text-muted">本月尚無紀錄</td>
+                                </tr>
+                            </tbody>
+                            <tfoot v-if="benefitLogs.length > 0">
+                                <tr class="table-active fw-bold">
+                                    <td colspan="3" class="text-end">本月總計：</td>
+                                    <td class="text-end">${{ totalBenefitAmount.toLocaleString() }}</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -205,11 +246,17 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 const inventory = ref([]);
                 const alerts = ref([]);
                 const orders = ref([]);
+                const benefitLogs = ref([]);
                 const filterCategory = ref('ALL');
+                const benefitMonth = ref(new Date().toISOString().slice(0, 7));
 
                 const filteredInventory = computed(() => {
                     if (filterCategory.value === 'ALL') return inventory.value;
                     return inventory.value.filter(p => p.category === filterCategory.value);
+                });
+
+                const totalBenefitAmount = computed(() => {
+                    return benefitLogs.value.reduce((sum, log) => sum + log.amount, 0);
                 });
 
                 const fetchData = async () => {
@@ -230,17 +277,28 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     }
                 };
 
+                const fetchBenefitLogs = async () => {
+                    const res = await fetch(`api/get_benefit_logs.php?month=${benefitMonth.value}`);
+                    const json = await res.json();
+                    if (json.success) {
+                        benefitLogs.value = json.data;
+                    }
+                };
+
                 const statusClass = (s) => {
                     if (s === 'PENDING') return 'bg-warning text-dark';
                     if (s === 'RECEIVED') return 'bg-success';
                     return 'bg-secondary';
                 };
 
-                onMounted(fetchData);
+                onMounted(() => {
+                    fetchData();
+                    fetchBenefitLogs();
+                });
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory };
+                return { view, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount };
             }
         }).mount('#app');
     </script>

@@ -72,10 +72,10 @@ require_once __DIR__ . '/../config.php';
         <div class="checkout-bar d-flex justify-content-between align-items-center">
             <div class="quota-info">
                 <div>已選：<span class="total-amount">${{ formatNumber(totalPrice) }}</span></div>
-                <div>剩餘額度：<span class="remaining-quota">${{ formatNumber(quota - totalPrice) }}</span></div>
+                <div>剩餘額度：<span class="remaining-quota" :class="{'text-danger': totalPrice > quota}">${{ formatNumber(quota - totalPrice) }}</span></div>
             </div>
             <button @click="submitOrder" :disabled="totalPrice === 0 || totalPrice > quota || submitting" class="btn btn-primary px-4 py-2 fw-bold rounded-pill" style="background-color: #00B900; border: none;">
-                {{ submitting ? '處理中...' : '送出訂單' }}
+                {{ submitting ? '處理中...' : (totalPrice > quota ? '超出額度' : '送出訂單') }}
             </button>
         </div>
     </div>
@@ -101,14 +101,30 @@ require_once __DIR__ . '/../config.php';
 
                 const fetchData = async () => {
                     try {
-                        const resp = await fetch('api_get_products.php');
-                        const result = await resp.json();
-                        if (result.success) {
-                            products.value = result.data;
-                            quota.value = result.quota_limit;
+                        // 1. 取得產品與額度
+                        const res = await fetch('api_get_products.php');
+                        const json = await res.json();
+                        if (json.success) {
+                            products.value = json.data;
+                            quota.value = json.quota_limit;
                         }
+
+                        // 2. 檢查是否有未完成訂單 (回填購物車)
+                        // TODO: 傳入真實 userId
+                        const resOrder = await fetch('api_get_orders_status.php?userId=U004f8cad542e37c7834a3920e60d1077');
+                        const jsonOrder = await resOrder.json();
+                        if (jsonOrder.success && jsonOrder.myOrder) {
+                            jsonOrder.myOrder.items.forEach(item => {
+                                cart.value[item.product_id] = item.quantity;
+                            });
+                            Swal.fire({
+                                toast: true, position: 'top-end', icon: 'info', 
+                                title: '已載入您未完成的訂單', showConfirmButton: false, timer: 3000
+                            });
+                        }
+
                     } catch (err) {
-                        alert('無法載入產品資料');
+                        Swal.fire('AURUMA', '載入失敗', 'error');
                     } finally {
                         loading.value = false;
                     }

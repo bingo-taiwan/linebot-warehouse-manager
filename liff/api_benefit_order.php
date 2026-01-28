@@ -37,36 +37,53 @@ try {
         }
     }
 
-    // 1. 記錄訂單 (狀態設為 PENDING)
-    $stmt = $pdo->prepare("INSERT INTO orders (order_type, requester_id, items_json, status) VALUES (?, ?, ?, ?)");
-    $stmt->execute([
-        'BENEFIT_ORDER',
-        $userId,
-        json_encode($input['items'], JSON_UNESCAPED_UNICODE),
-        'PENDING'
-    ]);
-    $orderId = $pdo->lastInsertId();
+    // 1. 檢查本月是否已有 PENDING 訂單
+    $checkOrder = $pdo->prepare("SELECT id FROM orders WHERE order_type = 'BENEFIT_ORDER' AND requester_id = ? AND status = 'PENDING' AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')");
+    $checkOrder->execute([$userId]);
+    $existingOrderId = $checkOrder->fetchColumn();
+
+    if ($existingOrderId) {
+        // 更新現有訂單
+        $stmt = $pdo->prepare("UPDATE orders SET items_json = ? WHERE id = ?");
+        $stmt->execute([
+            json_encode($input['items'], JSON_UNESCAPED_UNICODE),
+            $existingOrderId
+        ]);
+        $orderId = $existingOrderId;
+        $actionText = "更新";
+    } else {
+        // 新增訂單
+        $stmt = $pdo->prepare("INSERT INTO orders (order_type, requester_id, items_json, status) VALUES (?, ?, ?, ?)");
+        $stmt->execute([
+            'BENEFIT_ORDER',
+            $userId,
+            json_encode($input['items'], JSON_UNESCAPED_UNICODE),
+            'PENDING'
+        ]);
+        $orderId = $pdo->lastInsertId();
+        $actionText = "建立";
+    }
 
     // 2. 發送確認訊息給員工 (含簽收按鈕)
     $lineBot = new LineBot($config['line']);
     
     $body = FlexBuilder::vbox([
-        FlexBuilder::text("📦 福利品選購成功", ['weight' => 'bold', 'size' => 'lg']),
+        FlexBuilder::text("📦 福利品訂單已{$actionText}", ['weight' => 'bold', 'size' => 'lg']),
         FlexBuilder::text("訂單編號: #{$orderId}", ['size' => 'sm', 'color' => '#666666']),
         FlexBuilder::separator(['margin' => 'md']),
-        FlexBuilder::text("請於收到領貨通知後，點擊下方按鈕確認領取。", ['wrap' => true, 'size' => 'sm']),
+        FlexBuilder::text("您可以隨時修改內容，直到您按下簽收為止。", ['wrap' => true, 'size' => 'sm', 'color' => '#666666']),
         FlexBuilder::button(
-            "收到本月福利品",
-            ['type' => 'postback', 'data' => "action=confirm_receipt&order_id={$orderId}", 'displayText' => '我已收到本月福利品'],
+            "收到本月福利品 (簽收)",
+            ['type' => 'postback', 'data' => "action=confirm_receipt&order_id={$orderId}", 'displayText' => '我已收到本月福利品，確認簽收'],
             'primary'
         )
     ], ['spacing' => 'md']);
 
     $lineBot->push($userId, [
-        ['type' => 'flex', 'altText' => "福利品下單成功 (請於領貨後點擊確認)", 'contents' => FlexBuilder::bubble($body)]
+        ['type' => 'flex', 'altText' => "福利品訂單已{$actionText}", 'contents' => FlexBuilder::bubble($body)]
     ]);
 
-    echo json_encode(['success' => true, 'order_id' => $orderId]);
+    echo json_encode(['success' => true, 'order_id' => $orderId, 'message' => "訂單已{$actionText}"]);
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);

@@ -44,7 +44,7 @@ try {
         FlexBuilder::text("親愛的同仁您好：\n{$nextMonth} 月份的福利品自選已開放！", ['wrap' => true, 'margin' => 'md']),
         FlexBuilder::text("請於月底前完成選購，額度為 10,000 元。", ['size' => 'sm', 'color' => '#666666', 'margin' => 'sm']),
         FlexBuilder::button(
-            "立即前往選購",
+            "立即前往選擇",
             ['type' => 'uri', 'uri' => $liffUrl],
             'primary'
         )
