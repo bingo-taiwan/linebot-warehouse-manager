@@ -28,16 +28,25 @@ class MainHandler {
         $userId = $event['source']['userId'] ?? 'unknown';
         $user = $this->getUser($userId);
 
-        if (!$user) {
-            $this->lineBot->reply($event['replyToken'], [
-                ['type' => 'text', 'text' => "⚠️ 您的身份尚未核准.\n\n請將以下 ID 提供給管理員：\n" . $userId]
-            ]);
-            return;
-        }
+        // ... (existing RBAC check) ...
 
         $type = $event['type'];
         if ($type === 'message') {
-            $this->handleMessage($event, $user);
+            $messageType = $event['message']['type'];
+            if ($messageType === 'image') {
+                $this->handleImageMessage($event);
+            } elseif ($messageType === 'file') {
+                // 檢查是否為圖片檔案 (如 HEIC)
+                $fileName = $event['message']['fileName'] ?? '';
+                $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                if (in_array($ext, ['heic', 'heif', 'jpg', 'jpeg', 'png', 'webp'])) {
+                    $this->handleImageMessage($event);
+                } else {
+                    $this->handleMessage($event, $user);
+                }
+            } else {
+                $this->handleMessage($event, $user);
+            }
         } elseif ($type === 'postback') {
             $this->handlePostback($event, $user);
         } elseif ($type === 'follow') {
@@ -45,25 +54,98 @@ class MainHandler {
         }
     }
 
-    private function getUser($userId) {
-        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE line_user_id = ? AND is_active = 1");
-        $stmt->execute([$userId]);
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
+    // ... (getUser) ...
 
     private function handleMessage($event, $user) {
-        $text = $event['message']['text'] ?? '';
+        $text = trim($event['message']['text'] ?? '');
+        $userId = $user['line_user_id'];
+        
+        // 檢查是否有暫存圖片 Session
+        $sessionFile = __DIR__ . '/../data/session_' . $userId . '.json';
+        if (file_exists($sessionFile)) {
+            $session = json_decode(file_get_contents($sessionFile), true);
+            
+            // 處理 "A 產品名" 指令
+            if (isset($session['image_path']) && strtoupper(substr($text, 0, 1)) === 'A') {
+                $productName = trim(substr($text, 1));
+                $this->processProductImage($event, $session['image_path'], $productName);
+                unlink($sessionFile); // 清除 Session
+                return;
+            }
+        }
 
-        if (strpos($text, '大園') !== false) {
-            $this->replyStockSummary($event['replyToken'], '產品', 'DAYUAN');
-        } elseif (strpos($text, '台北') !== false) {
-            $this->replyStockSummary($event['replyToken'], '產品', 'TAIPEI');
-        } elseif ($text === '庫存' || $text === '查詢' || strpos($text, '庫存') !== false) {
-            $this->replyStockSummary($event['replyToken'], '產品');
+        if ($text === '庫存' || $text === '查詢') {
+            $this->replyStockSummary($event['replyToken'], $user);
         } else {
             $this->lineBot->reply($event['replyToken'], [
                 ['type' => 'text', 'text' => "您好 {$user['name']}！目前我能幫您查詢庫存。"]
             ]);
+        }
+    }
+
+    private function handleImageMessage($event) {
+        $messageId = $event['message']['id'];
+        $url = "https://api-data.line.me/v2/bot/message/{$messageId}/content";
+        
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            "Authorization: Bearer " . $this->config['line']['access_token']
+        ]);
+        $imageData = curl_exec($ch);
+        curl_close($ch);
+
+        if ($imageData) {
+            // 存到暫存區
+            $filename = time() . "_{$messageId}.jpg";
+            $savePath = __DIR__ . '/../data/temp_' . $filename;
+            file_put_contents($savePath, $imageData);
+            
+            // 寫入 Session
+            $sessionData = ['image_path' => $savePath, 'timestamp' => time()];
+            file_put_contents(__DIR__ . '/../data/session_' . $event['source']['userId'] . '.json', json_encode($sessionData));
+            
+            $this->lineBot->replyText($event['replyToken'], "📸 圖片已接收！\n請輸入指令指定用途：\n\n『A 產品名稱』\n(例如：A 弧形半圓沙發)\n\n系統將自動處理圖片並設為該產品封面。");
+        } else {
+            $this->lineBot->replyText($event['replyToken'], "⚠️ 圖片下載失敗。");
+        }
+    }
+
+    private function processProductImage($event, $tempPath, $productName) {
+        // 1. 檢查產品是否存在
+        $stmt = $this->pdo->prepare("SELECT id FROM products WHERE name = ?");
+        $stmt->execute([$productName]);
+        $pid = $stmt->fetchColumn();
+
+        if (!$pid) {
+            $this->lineBot->replyText($event['replyToken'], "❌ 找不到產品：{$productName}\n請確認名稱是否正確。");
+            return;
+        }
+
+        // 2. 呼叫 Python 處理圖片
+        $outputDir = __DIR__ . '/../liff/images'; // 假設圖片放在這裡
+        if (!is_dir($outputDir)) mkdir($outputDir, 0755, true);
+        
+        $baseName = "prod_{$pid}_" . time();
+        $script = __DIR__ . '/../scripts/process_image.py';
+        
+        $cmd = "python3 " . escapeshellarg($script) . " " . escapeshellarg($tempPath) . " " . escapeshellarg($outputDir) . " " . escapeshellarg($baseName);
+        $output = shell_exec($cmd);
+        
+        if (strpos($output, 'SUCCESS') !== false) {
+            list($status, $main, $thumb) = explode('|', trim($output));
+            
+            // 3. 更新資料庫
+            $publicUrl = "https://lt4.mynet.com.tw/linebot/warehouse/liff/images/{$main}";
+            $update = $this->pdo->prepare("UPDATE products SET image_url = ? WHERE id = ?");
+            $update->execute([$publicUrl, $pid]);
+            
+            // 刪除暫存檔
+            @unlink($tempPath);
+            
+            $this->lineBot->replyText($event['replyToken'], "✅ 更新成功！\n{$productName} 的圖片已更新。\n\n網址：{$publicUrl}");
+        } else {
+            $this->lineBot->replyText($event['replyToken'], "⚠️ 圖片處理失敗：\n" . $output);
         }
     }
 

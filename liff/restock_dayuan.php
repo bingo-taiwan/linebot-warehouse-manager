@@ -14,7 +14,7 @@ require_once __DIR__ . '/../config.php';
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
-        body { background-color: #f0f2f5; padding-bottom: 100px; }
+        body { background-color: #f0f2f5; padding-bottom: 120px; }
         .card { border: none; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); margin-bottom: 15px; }
         .stock-info { background-color: #e3f2fd; border-radius: 8px; padding: 8px 12px; font-size: 0.9rem; color: #1565C0; }
         .stock-info.low { background-color: #ffebee; color: #c62828; }
@@ -23,93 +23,94 @@ require_once __DIR__ . '/../config.php';
         
         .btn-action { width: 36px; height: 36px; border-radius: 50%; padding: 0; font-weight: bold; }
         .qty-input { width: 50px; text-align: center; border: none; background: transparent; font-weight: bold; font-size: 1.1rem; }
+        .product-img { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; margin-right: 12px; }
         
         .checkout-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); z-index: 999; }
+        
+        /* Tab Styling */
+        .nav-pills .nav-link { border-radius: 8px; font-weight: bold; color: #666; }
+        .nav-pills .nav-link.active { background-color: #0d6efd; color: white; }
+        
+        [v-cloak] { display: none; }
     </style>
 </head>
 <body>
-    <div id="app" class="container py-4">
+    <div id="app" v-cloak class="container py-3">
         <h4 class="mb-3 text-center fw-bold">🚛 補貨申請 (大園 ➔ 台北)</h4>
 
-        <!-- Category Switch -->
-        <div class="d-flex justify-content-center mb-4">
-            <div class="btn-group w-100" role="group">
-                <input type="radio" class="btn-check" name="cat" id="cat1" value="產品" v-model="categoryFilter" checked>
-                <label class="btn btn-outline-primary" for="cat1">產品</label>
-
-                <input type="radio" class="btn-check" name="cat" id="cat2" value="包材" v-model="categoryFilter">
-                <label class="btn btn-outline-primary" for="cat2">包材</label>
-
-                <input type="radio" class="btn-check" name="cat" id="cat3" value="雜項" v-model="categoryFilter">
-                <label class="btn btn-outline-primary" for="cat3">雜項</label>
-            </div>
-        </div>
+        <!-- 分類切換 -->
+        <ul class="nav nav-pills nav-fill mb-3 bg-white p-1 rounded-3 shadow-sm">
+            <li class="nav-item"><a class="nav-link" :class="{active: currentTab === '產品'}" @click="currentTab = '產品'">產品</a></li>
+            <li class="nav-item"><a class="nav-link" :class="{active: currentTab === '包材'}" @click="currentTab = '包材'">包材</a></li>
+            <li class="nav-item"><a class="nav-link" :class="{active: currentTab === '雜項'}" @click="currentTab = '雜項'">雜項</a></li>
+        </ul>
 
         <div v-if="loading" class="text-center my-5">
             <div class="spinner-border text-primary" role="status"></div>
-            <p class="mt-2 text-muted">正在盤點大園庫存...</p>
+            <p class="mt-2 text-muted small">正在盤點大園庫存...</p>
         </div>
 
         <div v-else>
-            <div v-if="filteredProducts.length === 0" class="text-center text-muted my-5">
-                此分類無可補貨品項
-            </div>
             <div v-for="item in filteredProducts" :key="item.id" class="card p-3">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h5 class="fw-bold mb-1">{{ item.name }}</h5>
-                        <div class="text-muted small">{{ item.spec }}</div>
+                <div class="d-flex align-items-center mb-2">
+                    <img v-if="item.image_url" :src="item.image_url" class="product-img" alt="Product Image">
+                    <div v-else class="rounded bg-light d-flex align-items-center justify-content-center me-3" style="width: 60px; height: 60px; font-size: 1.5rem;">
+                        {{ getEmoji(item.category) }}
                     </div>
-                    <div class="text-end">
-                        <span class="badge bg-info text-dark d-block mb-1">{{ item.unit_per_case }}{{ getUnit(item.name, item.spec) }}/箱</span>
-                        <span class="badge bg-secondary">{{ item.category }}</span>
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h5 class="fw-bold mb-1" style="font-size: 1.1rem;">{{ item.name }}</h5>
+                                <div class="text-muted small">{{ item.spec }}</div>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-secondary">{{ item.category }}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div class="row mt-3 g-2">
-                    <!-- 台北現況 -->
+                <div class="row mt-2 g-2 text-center">
                     <div class="col-6">
                         <div class="stock-info" :class="{ 'low': item.taipei_units < 10 }">
                             <div class="small opacity-75">台北現有</div>
                             <div class="fw-bold">{{ item.taipei_units }} {{ getUnit(item.name, item.spec) }}</div>
                         </div>
                     </div>
-                    <!-- 大園庫存 -->
                     <div class="col-6">
                         <div class="stock-info bg-light text-dark">
                             <div class="small opacity-75">大園庫存</div>
-                            <div class="fw-bold">
-                                {{ item.dayuan_cases }} 
-                                <span v-if="item.unit_per_case == 1">{{ getUnit(item.name, item.spec) }}</span>
-                                <span v-else>箱</span>
-                            </div>
+                            <div class="fw-bold">{{ item.dayuan_cases }} 箱</div>
+                            <div class="mt-1 x-small" style="font-size: 0.75rem;" v-html="getExpiryStatus(item.earliest_expiry)"></div>
                         </div>
                     </div>
                 </div>
 
-                <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
-                    <div>
-                        <div class="conversion-hint" v-if="item.unit_per_case > 1">1 箱 = {{ item.unit_per_case }} {{ getUnit(item.name, item.spec) }}</div>
-                        <div v-if="cart[item.id] > 0" class="preview-add">
-                            預計 +{{ cart[item.id] * item.unit_per_case }} {{ getUnit(item.name, item.spec) }}
-                        </div>
+                <div class="d-flex align-items-center justify-content-between mt-3 pt-2 border-top">
+                    <div class="small">
+                        <div class="conversion-hint text-muted">1 箱 = {{ item.unit_per_case }} {{ getUnit(item.name, item.spec) }}</div>
+                        <div v-if="cart[item.id] > 0" class="preview-add">➔ +{{ cart[item.id] * item.unit_per_case }}</div>
                     </div>
                     <div class="d-flex align-items-center bg-light rounded-pill p-1">
-                        <button @click="updateQty(item, -1)" class="btn btn-light btn-action">−</button>
+                        <button @click="updateQty(item, -1)" class="btn btn-light btn-action shadow-sm">−</button>
                         <input type="text" readonly class="qty-input" :value="cart[item.id] || 0">
-                        <button @click="updateQty(item, 1)" class="btn btn-light btn-action">+</button>
+                        <button @click="updateQty(item, 1)" class="btn btn-light btn-action shadow-sm">+</button>
                     </div>
                 </div>
+            </div>
+            
+            <div v-if="filteredProducts.length === 0" class="text-center py-5 text-muted">
+                此分類目前無可調撥商品
             </div>
         </div>
 
         <!-- 底部操作區 -->
         <div class="checkout-bar d-flex justify-content-between align-items-center">
             <div>
-                <div class="small text-muted">本次調撥</div>
-                <div class="fw-bold fs-5">{{ totalCases }} 箱</div>
+                <div class="small text-muted">本次調撥共</div>
+                <div class="fw-bold fs-5 text-primary">{{ totalCases }} 箱</div>
             </div>
-            <button @click="submitRestock" :disabled="totalCases === 0 || submitting" class="btn btn-primary px-4 rounded-pill fw-bold">
+            <button @click="submitRestock" :disabled="totalCases === 0 || submitting" class="btn btn-primary px-4 rounded-pill fw-bold py-2 shadow">
                 {{ submitting ? '處理中...' : '確認調撥' }}
             </button>
         </div>
@@ -125,10 +126,10 @@ require_once __DIR__ . '/../config.php';
                 const cart = ref({});
                 const loading = ref(true);
                 const submitting = ref(false);
-                const categoryFilter = ref('產品');
+                const currentTab = ref('產品');
 
                 const filteredProducts = computed(() => {
-                    return products.value.filter(p => p.category === categoryFilter.value);
+                    return products.value.filter(p => p.category === currentTab.value);
                 });
 
                 const totalCases = computed(() => {
@@ -136,18 +137,32 @@ require_once __DIR__ . '/../config.php';
                 });
 
                 const getUnit = (name, spec) => {
-                    if (name.includes('盒')) return '盒';
-                    if (name.includes('包')) return '包';
-                    if (name.includes('瓶')) return '瓶';
-                    if (name.includes('罐')) return '罐';
-                    if (name.includes('座')) return '座';
-                    
+                    if (name && name.includes('盒')) return '盒';
+                    if (name && name.includes('包')) return '包';
+                    if (name && name.includes('瓶')) return '瓶';
                     if (spec) {
                         if (spec.includes('包')) return '包';
                         if (spec.includes('盒')) return '盒';
-                        if (spec.includes('瓶')) return '瓶';
                     }
                     return '單位';
+                };
+
+                const getEmoji = (cat) => {
+                    if (cat === '產品') return '💊';
+                    if (cat === '包材') return '📦';
+                    return '📎';
+                };
+
+                const getExpiryStatus = (dateStr) => {
+                    if (!dateStr) return '';
+                    const today = new Date();
+                    const expiry = new Date(dateStr);
+                    const diffTime = expiry - today;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                    if (diffDays <= 0) return '<span class="text-danger">⚠️ 已過期</span>';
+                    if (diffDays <= 90) return `<span class="text-warning">🔔 剩 ${diffDays} 天</span>`;
+                    return `<span class="text-success">😌 剩 ${diffDays} 天</span>`;
                 };
 
                 const fetchData = async () => {
@@ -156,9 +171,11 @@ require_once __DIR__ . '/../config.php';
                         const json = await res.json();
                         if (json.success) {
                             products.value = json.data;
+                        } else {
+                            Swal.fire('AURUMA', '載入失敗：' + json.message, 'error');
                         }
                     } catch (e) {
-                        Swal.fire('AURUMA', '載入失敗', 'error');
+                        Swal.fire('AURUMA', '網路錯誤', 'error');
                     } finally {
                         loading.value = false;
                     }
@@ -169,7 +186,15 @@ require_once __DIR__ . '/../config.php';
                     const next = current + delta;
                     if (next < 0) return;
                     if (next > item.dayuan_cases) {
-                        Swal.fire('AURUMA', '大園庫存不足！', 'warning');
+                        Swal.fire({
+                            title: '庫存不足',
+                            text: `大園倉僅剩 ${item.dayuan_cases} 箱`,
+                            icon: 'warning',
+                            toast: true,
+                            position: 'top',
+                            showConfirmButton: false,
+                            timer: 2000
+                        });
                         return;
                     }
                     if (next === 0) delete cart.value[item.id];
@@ -183,7 +208,8 @@ require_once __DIR__ . '/../config.php';
                         icon: 'question',
                         showCancelButton: true,
                         confirmButtonText: '確定',
-                        cancelButtonText: '取消'
+                        cancelButtonText: '取消',
+                        confirmButtonColor: '#0d6efd'
                     });
                     
                     if (!confirmRes.isConfirmed) return;
@@ -203,7 +229,7 @@ require_once __DIR__ . '/../config.php';
                         const json = await res.json();
                         
                         if (json.success) {
-                            await Swal.fire('AURUMA', '✅ 訂單已送出！請等待倉管人員備貨。', 'success');
+                            await Swal.fire('AURUMA', '✅ 補貨申請已送出！', 'success');
                             liff.closeWindow();
                         } else {
                             Swal.fire('AURUMA', '❌ 失敗：' + json.message, 'error');
@@ -220,7 +246,7 @@ require_once __DIR__ . '/../config.php';
                     try { await liff.init({ liffId: "2008988832-PuJ7aR9I" }); } catch (e) {}
                 });
 
-                return { products, cart, loading, submitting, totalCases, categoryFilter, filteredProducts, getUnit, updateQty, submitRestock };
+                return { products, cart, loading, submitting, currentTab, filteredProducts, totalCases, getUnit, updateQty, submitRestock, getExpiryStatus, getEmoji };
             }
         }).mount('#app');
     </script>

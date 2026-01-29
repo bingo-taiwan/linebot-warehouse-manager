@@ -26,14 +26,20 @@ try {
             COALESCE((SELECT SUM(unit_count) FROM stocks s1 WHERE s1.product_id = p.id AND s1.warehouse_id = 'TAIPEI'), 0) as taipei_units,
             
             -- 大園倉可調撥箱數 (排除過期)
-            -- 若 unit_per_case=1 (如雜項)，則將 unit_count 視為箱數
             COALESCE((
                 SELECT SUM(case_count + CASE WHEN p.unit_per_case = 1 THEN unit_count ELSE 0 END) 
                 FROM stocks s2 
                 WHERE s2.product_id = p.id AND s2.warehouse_id = 'DAYUAN' AND (s2.expiry_date IS NULL OR s2.expiry_date > CURDATE())
-            ), 0) as dayuan_cases
+            ), 0) as dayuan_cases,
+
+            -- 大園倉最近效期
+            (SELECT MIN(expiry_date) 
+             FROM stocks s3 
+             WHERE s3.product_id = p.id AND s3.warehouse_id = 'DAYUAN' AND s3.case_count > 0 AND (s3.expiry_date IS NULL OR s3.expiry_date > CURDATE())
+            ) as earliest_expiry
             
         FROM products p
+        WHERE p.name NOT LIKE '%(過期)%' AND p.name NOT LIKE '%（過期）%'
         GROUP BY p.id
         HAVING dayuan_cases > 0 -- 只列出大園有貨可補的
         ORDER BY p.category, p.id
@@ -42,7 +48,11 @@ try {
     $stmt = $pdo->query($sql);
     $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode(['success' => true, 'data' => $products]);
+    $json = json_encode(['success' => true, 'data' => $products]);
+    if ($json === false) {
+        throw new Exception("JSON Encode Error: " . json_last_error_msg());
+    }
+    echo $json;
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);

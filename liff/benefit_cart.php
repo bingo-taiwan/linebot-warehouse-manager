@@ -50,7 +50,8 @@ require_once __DIR__ . '/../config.php';
             <div v-for="item in products" :key="item.id" class="col-12 col-md-6">
                 <div class="product-card card h-100 p-3">
                     <div class="d-flex align-items-center">
-                        <div class="flex-shrink-0 bg-light rounded" style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
+                        <img v-if="item.image_url" :src="item.image_url" class="rounded flex-shrink-0" style="width: 80px; height: 80px; object-fit: cover;" alt="Product">
+                        <div v-else class="flex-shrink-0 bg-light rounded" style="width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
                             <span style="font-size: 2rem;">{{ getEmoji(item.category) }}</span>
                         </div>
                         <div class="flex-grow-1 ms-3">

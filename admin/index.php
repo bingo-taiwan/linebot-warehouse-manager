@@ -54,7 +54,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
     <div id="app" class="d-flex">
         <!-- Sidebar -->
         <div class="sidebar p-3 d-flex flex-column flex-shrink-0" style="width: 250px;">
-            <h4 class="mb-4 px-2">📦 倉儲管理</h4>
+            <h4 class="mb-4 px-2">📦 倉儲管理 V2</h4>
             <ul class="nav nav-pills flex-column mb-auto">
                 <li class="nav-item">
                     <a class="nav-link" :class="{active: view === 'dashboard'}" @click="view = 'dashboard'">📊 總覽與預警</a>
@@ -168,7 +168,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                     <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'DAYUAN'" :class="{'text-danger fw-bold': parseInt(p.dayuan_stock) < parseInt(p.alert_threshold_cases)}">
                                         {{ p.dayuan_stock }} <span class="small text-muted">{{ p.unit_per_case == 1 ? getUnit(p.name, p.spec) : '箱' }}</span>
                                         <div v-if="p.dayuan_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
-                                            <div v-for="exp in p.dayuan_expiry.split(', ')" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
+                                            <div v-for="exp in (p.dayuan_expiry ? p.dayuan_expiry.split(', ') : [])" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
                                                 {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
                                             </div>
                                         </div>
@@ -176,7 +176,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                     <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'TAIPEI'" :class="{'text-danger fw-bold': parseInt(p.taipei_stock) < parseInt(p.alert_threshold_units)}">
                                         {{ p.taipei_stock }} <span class="small text-muted">{{ getUnit(p.name, p.spec) }}</span>
                                         <div v-if="p.taipei_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
-                                            <div v-for="exp in p.taipei_expiry.split(', ')" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
+                                            <div v-for="exp in (p.taipei_expiry ? p.taipei_expiry.split(', ') : [])" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
                                                 {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
                                             </div>
                                         </div>
@@ -339,7 +339,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount };
+                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit };
             }
         }).mount('#app');
     </script>
