@@ -29,7 +29,21 @@ require_once __DIR__ . '/../config.php';
 </head>
 <body>
     <div id="app" class="container py-4">
-        <h4 class="mb-4 text-center fw-bold">🚛 補貨申請 (大園 ➔ 台北)</h4>
+        <h4 class="mb-3 text-center fw-bold">🚛 補貨申請 (大園 ➔ 台北)</h4>
+
+        <!-- Category Switch -->
+        <div class="d-flex justify-content-center mb-4">
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="cat" id="cat1" value="產品" v-model="categoryFilter" checked>
+                <label class="btn btn-outline-primary" for="cat1">產品</label>
+
+                <input type="radio" class="btn-check" name="cat" id="cat2" value="包材" v-model="categoryFilter">
+                <label class="btn btn-outline-primary" for="cat2">包材</label>
+
+                <input type="radio" class="btn-check" name="cat" id="cat3" value="雜項" v-model="categoryFilter">
+                <label class="btn btn-outline-primary" for="cat3">雜項</label>
+            </div>
+        </div>
 
         <div v-if="loading" class="text-center my-5">
             <div class="spinner-border text-primary" role="status"></div>
@@ -37,13 +51,17 @@ require_once __DIR__ . '/../config.php';
         </div>
 
         <div v-else>
-            <div v-for="item in products" :key="item.id" class="card p-3">
+            <div v-if="filteredProducts.length === 0" class="text-center text-muted my-5">
+                此分類無可補貨品項
+            </div>
+            <div v-for="item in filteredProducts" :key="item.id" class="card p-3">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
                         <h5 class="fw-bold mb-1">{{ item.name }}</h5>
                         <div class="text-muted small">{{ item.spec }}</div>
                     </div>
                     <div class="text-end">
+                        <span class="badge bg-info text-dark d-block mb-1">{{ item.unit_per_case }}{{ getUnit(item.name, item.spec) }}/箱</span>
                         <span class="badge bg-secondary">{{ item.category }}</span>
                     </div>
                 </div>
@@ -53,23 +71,27 @@ require_once __DIR__ . '/../config.php';
                     <div class="col-6">
                         <div class="stock-info" :class="{ 'low': item.taipei_units < 10 }">
                             <div class="small opacity-75">台北現有</div>
-                            <div class="fw-bold">{{ item.taipei_units }} {{ getUnit(item.spec) }}</div>
+                            <div class="fw-bold">{{ item.taipei_units }} {{ getUnit(item.name, item.spec) }}</div>
                         </div>
                     </div>
                     <!-- 大園庫存 -->
                     <div class="col-6">
                         <div class="stock-info bg-light text-dark">
                             <div class="small opacity-75">大園庫存</div>
-                            <div class="fw-bold">{{ item.dayuan_cases }} 箱</div>
+                            <div class="fw-bold">
+                                {{ item.dayuan_cases }} 
+                                <span v-if="item.unit_per_case == 1">{{ getUnit(item.name, item.spec) }}</span>
+                                <span v-else>箱</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
                     <div>
-                        <div class="conversion-hint">1 箱 = {{ item.unit_per_case }} {{ getUnit(item.spec) }}</div>
+                        <div class="conversion-hint" v-if="item.unit_per_case > 1">1 箱 = {{ item.unit_per_case }} {{ getUnit(item.name, item.spec) }}</div>
                         <div v-if="cart[item.id] > 0" class="preview-add">
-                            預計 +{{ cart[item.id] * item.unit_per_case }} {{ getUnit(item.spec) }}
+                            預計 +{{ cart[item.id] * item.unit_per_case }} {{ getUnit(item.name, item.spec) }}
                         </div>
                     </div>
                     <div class="d-flex align-items-center bg-light rounded-pill p-1">
@@ -103,13 +125,29 @@ require_once __DIR__ . '/../config.php';
                 const cart = ref({});
                 const loading = ref(true);
                 const submitting = ref(false);
+                const categoryFilter = ref('產品');
+
+                const filteredProducts = computed(() => {
+                    return products.value.filter(p => p.category === categoryFilter.value);
+                });
 
                 const totalCases = computed(() => {
                     return Object.values(cart.value).reduce((a, b) => a + b, 0);
                 });
 
-                const getUnit = (spec) => {
-                    return spec && spec.includes('包') ? '包' : '盒';
+                const getUnit = (name, spec) => {
+                    if (name.includes('盒')) return '盒';
+                    if (name.includes('包')) return '包';
+                    if (name.includes('瓶')) return '瓶';
+                    if (name.includes('罐')) return '罐';
+                    if (name.includes('座')) return '座';
+                    
+                    if (spec) {
+                        if (spec.includes('包')) return '包';
+                        if (spec.includes('盒')) return '盒';
+                        if (spec.includes('瓶')) return '瓶';
+                    }
+                    return '單位';
                 };
 
                 const fetchData = async () => {
@@ -182,7 +220,7 @@ require_once __DIR__ . '/../config.php';
                     try { await liff.init({ liffId: "2008988832-PuJ7aR9I" }); } catch (e) {}
                 });
 
-                return { products, cart, loading, submitting, totalCases, getUnit, updateQty, submitRestock };
+                return { products, cart, loading, submitting, totalCases, categoryFilter, filteredProducts, getUnit, updateQty, submitRestock };
             }
         }).mount('#app');
     </script>

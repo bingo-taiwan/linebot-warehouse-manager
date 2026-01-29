@@ -122,6 +122,13 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 <div class="d-flex justify-content-between mb-3">
                     <h3>即時庫存</h3>
                     <div class="d-flex gap-2">
+                        <!-- View Mode Switch -->
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-secondary" :class="{active: viewMode === 'TOTAL'}" @click="viewMode = 'TOTAL'">總覽</button>
+                            <button class="btn btn-outline-secondary" :class="{active: viewMode === 'DAYUAN'}" @click="viewMode = 'DAYUAN'">大園倉</button>
+                            <button class="btn btn-outline-secondary" :class="{active: viewMode === 'TAIPEI'}" @click="viewMode = 'TAIPEI'">台北倉</button>
+                        </div>
+
                         <select v-model="filterCategory" class="form-select form-select-sm" style="width: 150px;">
                             <option value="ALL">全部類別</option>
                             <option value="產品">產品</option>
@@ -146,20 +153,33 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                     <th>產品名稱</th>
                                     <th>類別</th>
                                     <th>規格</th>
-                                    <th class="text-center">大園倉 (箱)</th>
-                                    <th class="text-center">台北倉 (散)</th>
+                                    <th class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'DAYUAN'">大園倉</th>
+                                    <th class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'TAIPEI'">台北倉</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="p in filteredInventory" :key="p.id">
                                     <td class="fw-bold">{{ p.name }}</td>
                                     <td><span class="badge bg-secondary">{{ p.category }}</span></td>
-                                    <td class="text-muted small">{{ p.spec }}</td>
-                                    <td class="text-center" :class="{'text-danger fw-bold': parseInt(p.dayuan_stock) < parseInt(p.alert_threshold_cases)}">
-                                        {{ p.dayuan_stock }}
+                                    <td class="text-muted small">
+                                        {{ p.spec }}
+                                        <div v-if="p.unit_per_case > 1">({{ p.unit_per_case }}{{ getUnit(p.name, p.spec) }}/箱)</div>
                                     </td>
-                                    <td class="text-center" :class="{'text-danger fw-bold': parseInt(p.taipei_stock) < parseInt(p.alert_threshold_units)}">
-                                        {{ p.taipei_stock }}
+                                    <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'DAYUAN'" :class="{'text-danger fw-bold': parseInt(p.dayuan_stock) < parseInt(p.alert_threshold_cases)}">
+                                        {{ p.dayuan_stock }} <span class="small text-muted">{{ p.unit_per_case == 1 ? getUnit(p.name, p.spec) : '箱' }}</span>
+                                        <div v-if="p.dayuan_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
+                                            <div v-for="exp in p.dayuan_expiry.split(', ')" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
+                                                {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'TAIPEI'" :class="{'text-danger fw-bold': parseInt(p.taipei_stock) < parseInt(p.alert_threshold_units)}">
+                                        {{ p.taipei_stock }} <span class="small text-muted">{{ getUnit(p.name, p.spec) }}</span>
+                                        <div v-if="p.taipei_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
+                                            <div v-for="exp in p.taipei_expiry.split(', ')" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
+                                                {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
+                                            </div>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -242,6 +262,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
         createApp({
             setup() {
                 const view = ref('dashboard');
+                const viewMode = ref('TOTAL'); // TOTAL, DAYUAN, TAIPEI
                 const stats = ref({});
                 const inventory = ref([]);
                 const alerts = ref([]);
@@ -258,6 +279,21 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 const totalBenefitAmount = computed(() => {
                     return benefitLogs.value.reduce((sum, log) => sum + log.amount, 0);
                 });
+
+                const getUnit = (name, spec) => {
+                    if (name && name.includes('盒')) return '盒';
+                    if (name && name.includes('包')) return '包';
+                    if (name && name.includes('瓶')) return '瓶';
+                    if (name && name.includes('罐')) return '罐';
+                    if (name && name.includes('座')) return '座';
+                    
+                    if (spec) {
+                        if (spec.includes('包')) return '包';
+                        if (spec.includes('盒')) return '盒';
+                        if (spec.includes('瓶')) return '瓶';
+                    }
+                    return '單位';
+                };
 
                 const fetchData = async () => {
                     // Get Stats & Inventory
@@ -291,6 +327,11 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     return 'bg-secondary';
                 };
 
+                const isExpired = (dateStr) => {
+                    if (!dateStr) return false;
+                    return new Date(dateStr) < new Date();
+                };
+
                 onMounted(() => {
                     fetchData();
                     fetchBenefitLogs();
@@ -298,7 +339,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount };
+                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount };
             }
         }).mount('#app');
     </script>

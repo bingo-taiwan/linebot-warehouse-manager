@@ -26,7 +26,12 @@ try {
             COALESCE((SELECT SUM(unit_count) FROM stocks s1 WHERE s1.product_id = p.id AND s1.warehouse_id = 'TAIPEI'), 0) as taipei_units,
             
             -- 大園倉可調撥箱數 (排除過期)
-            COALESCE((SELECT SUM(case_count) FROM stocks s2 WHERE s2.product_id = p.id AND s2.warehouse_id = 'DAYUAN' AND (s2.expiry_date IS NULL OR s2.expiry_date > CURDATE())), 0) as dayuan_cases
+            -- 若 unit_per_case=1 (如雜項)，則將 unit_count 視為箱數
+            COALESCE((
+                SELECT SUM(case_count + CASE WHEN p.unit_per_case = 1 THEN unit_count ELSE 0 END) 
+                FROM stocks s2 
+                WHERE s2.product_id = p.id AND s2.warehouse_id = 'DAYUAN' AND (s2.expiry_date IS NULL OR s2.expiry_date > CURDATE())
+            ), 0) as dayuan_cases
             
         FROM products p
         GROUP BY p.id

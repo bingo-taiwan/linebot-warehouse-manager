@@ -11,10 +11,12 @@ try {
     // 1. 獲取庫存總覽與預警
     $sql = "
         SELECT 
-            p.id, p.name, p.category, p.spec,
+            p.id, p.name, p.category, p.spec, p.unit_per_case,
             p.alert_threshold_cases, p.alert_threshold_units,
             COALESCE(SUM(CASE WHEN s.warehouse_id = 'DAYUAN' THEN s.case_count ELSE 0 END), 0) as dayuan_stock,
-            COALESCE(SUM(CASE WHEN s.warehouse_id = 'TAIPEI' THEN s.unit_count ELSE 0 END), 0) as taipei_stock
+            COALESCE(SUM(CASE WHEN s.warehouse_id = 'TAIPEI' THEN s.unit_count ELSE 0 END), 0) as taipei_stock,
+            GROUP_CONCAT(DISTINCT CASE WHEN s.warehouse_id = 'DAYUAN' AND s.expiry_date IS NOT NULL THEN CONCAT(s.expiry_date, ':', s.case_count) END SEPARATOR ', ') as dayuan_expiry,
+            GROUP_CONCAT(DISTINCT CASE WHEN s.warehouse_id = 'TAIPEI' AND s.expiry_date IS NOT NULL THEN CONCAT(s.expiry_date, ':', s.unit_count) END SEPARATOR ', ') as taipei_expiry
         FROM products p
         LEFT JOIN stocks s ON p.id = s.product_id AND (s.expiry_date IS NULL OR s.expiry_date > CURDATE())
         GROUP BY p.id

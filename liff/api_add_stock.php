@@ -20,17 +20,21 @@ try {
 
     $pdo->beginTransaction();
 
-    // 1. 插入產品
-    $stmt = $pdo->prepare("INSERT INTO products (name, category, spec, unit_per_case) VALUES (?, ?, ?, ?)");
-    $stmt->execute([
-        $input['name'],
-        $input['category'],
-        $input['spec'],
-        $input['unit_per_case'] ?? 1
-    ]);
-    $productId = $pdo->lastInsertId();
+    $productId = $input['product_id'] ?? null;
 
-    // 2. 插入大園倉初始庫存
+    if (!$productId) {
+        // 1. 插入新產品
+        $stmt = $pdo->prepare("INSERT INTO products (name, category, spec, unit_per_case) VALUES (?, ?, ?, ?)");
+        $stmt->execute([
+            $input['name'],
+            $input['category'],
+            $input['spec'],
+            $input['unit_per_case'] ?? 1
+        ]);
+        $productId = $pdo->lastInsertId();
+    }
+
+    // 2. 插入大園倉庫存
     $stmt = $pdo->prepare("INSERT INTO stocks (warehouse_id, product_id, case_count, expiry_date) VALUES (?, ?, ?, ?)");
     $stmt->execute([
         'DAYUAN',

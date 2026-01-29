@@ -35,12 +35,12 @@ return [
         'ADMIN_WAREHOUSE' => [
             'name' => '大園倉+台北倉倉管',
             'permissions' => ['all_warehouses', 'edit_inventory', 'order_dayuan', 'employee_benefit'],
-            'rich_menu' => 'richmenu-xxxxxxxxxxxx1', // TODO: 建立後填入
+            'rich_menu' => 'richmenu-dc1a044eedef7c1871cacbe38c0d3f8b', 
         ],
         'ADMIN_OFFICE' => [
             'name' => '行政與台北倉倉管',
             'permissions' => ['view_valid_only', 'taipei_warehouse', 'order_dayuan', 'employee_benefit'],
-            'rich_menu' => 'richmenu-xxxxxxxxxxxx2',
+            'rich_menu' => 'richmenu-dc1a044eedef7c1871cacbe38c0d3f8b',
         ],
         'SALES_LECTURER' => [
             'name' => '業務講師',
