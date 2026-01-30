@@ -54,7 +54,23 @@ class MainHandler {
         }
     }
 
-    // ... (getUser) ...
+    private function getUser($lineUserId) {
+        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE line_user_id = ?");
+        $stmt->execute([$lineUserId]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user) {
+            // 返回預設用戶資料（未註冊用戶）
+            return [
+                'line_user_id' => $lineUserId,
+                'name' => '訪客',
+                'role' => 'guest',
+                'is_active' => 0
+            ];
+        }
+
+        return $user;
+    }
 
     private function handleMessage($event, $user) {
         $text = trim($event['message']['text'] ?? '');
