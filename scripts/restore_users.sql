@@ -1,0 +1,10 @@
+SET NAMES utf8mb4;
+
+INSERT INTO users (line_user_id, name, role) VALUES 
+('Ud73b84a2f6219421f13c59202121c13f', '大園倉管A', 'ADMIN_WAREHOUSE'),
+('Uc7e3c9f4150a2e682af1fb98badf1b31', '大園倉管B', 'ADMIN_WAREHOUSE')
+ON DUPLICATE KEY UPDATE role='ADMIN_WAREHOUSE';
+
+INSERT INTO users (line_user_id, name, role) 
+VALUES ('U004f8cad542e37c7834a3920e60d1077', '超級管理員', 'ADMIN_WAREHOUSE') 
+ON DUPLICATE KEY UPDATE role='ADMIN_WAREHOUSE', name='超級管理員';
