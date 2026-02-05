@@ -53,6 +53,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
 </head>
 <body>
     <div id="app" class="d-flex">
+        <h1 style="color:red; position:fixed; top:0; right:0; z-index:9999;">REMOTE TEST 1.3</h1>
         <!-- Sidebar -->
         <div class="sidebar p-3 d-flex flex-column flex-shrink-0" style="width: 250px;">
             <h4 class="mb-4 px-2">📦 倉儲管理 V2</h4>
