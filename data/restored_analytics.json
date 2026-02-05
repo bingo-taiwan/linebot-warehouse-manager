@@ -1,0 +1,37 @@
+{
+    "daily": {
+        "2026-02-06": {
+            "webhook_count": 0,
+            "unique_users": [],
+            "event_types": {},
+            "errors": 0
+        }
+    },
+    "monthly": {},
+    "recent_activity": [],
+    "user_history": {},
+    "user_counts": {
+        "U004f8cad542e37c7834a3920e60d1077": {
+            "total": 280,
+            "daily": {
+                "2026-02-06": 0
+            }
+        },
+        "U2d6b2ccc73c20effa2310a93a00a9b14": {
+            "total": 6,
+            "daily": {}
+        },
+        "Uc7e3c9f4150a2e682af1fb98badf1b31": {
+            "total": 13,
+            "daily": {}
+        },
+        "Ud73b84a2f6219421f13c59202121c13f": {
+            "total": 7,
+            "daily": {}
+        },
+        "U70a305bb818ace49a521457b3b28802a": {
+            "total": 2,
+            "daily": {}
+        }
+    }
+}
