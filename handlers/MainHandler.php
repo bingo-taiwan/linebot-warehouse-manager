@@ -186,7 +186,126 @@ class MainHandler {
         }
     }
 
-    // ... handleConfirmReceipt ... (keep as is)
+    private function handleConfirmReceipt($event, $user, $orderId) {
+        try {
+            $this->pdo->beginTransaction();
+
+            $stmt = $this->pdo->prepare("SELECT * FROM orders WHERE id = ? FOR UPDATE");
+            $stmt->execute([$orderId]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$order) throw new Exception("訂單不存在");
+            if ($order['status'] === 'RECEIVED') {
+                $this->lineBot->replyText($event['replyToken'], "此訂單已簽收過。");
+                $this->pdo->rollBack();
+                return;
+            }
+
+            $items = json_decode($order['items_json'], true);
+            $status = $order['status'];
+
+            // 1. Stock Logic
+            if ($status === 'PENDING') {
+                // Deduct Dayuan & Add Taipei
+                $items = $this->deductDayuanStock($items);
+                
+                // Save batch info
+                $json = json_encode($items, JSON_UNESCAPED_UNICODE);
+                $u = $this->pdo->prepare("UPDATE orders SET items_json = ? WHERE id = ?");
+                $u->execute([$json, $orderId]);
+                
+                $this->addTaipeiStock($items);
+            } elseif ($status === 'SHIPPED') {
+                // Only Add Taipei (Dayuan already deducted)
+                $this->addTaipeiStock($items);
+            }
+
+            // 2. Update Status
+            $upd = $this->pdo->prepare("UPDATE orders SET status = 'RECEIVED', receive_date = CURDATE(), updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            $upd->execute([$orderId]);
+
+            $this->pdo->commit();
+
+            $this->lineBot->replyText($event['replyToken'], "✅ 訂單 #{$orderId} 已確認簽收！\n庫存已更新至台北倉。");
+
+        } catch (Exception $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            $this->lineBot->replyText($event['replyToken'], "❌ 簽收失敗：\n" . $e->getMessage());
+        }
+    }
+
+    private function deductDayuanStock($items) {
+        foreach ($items as &$item) {
+            $pid = $item['product_id'];
+            $qtyCases = $item['quantity'];
+            $item['batches_used'] = [];
+
+            $stmt = $this->pdo->prepare("SELECT id, case_count, expiry_date FROM stocks WHERE product_id = ? AND warehouse_id = 'DAYUAN' AND case_count > 0 ORDER BY expiry_date ASC");
+            $stmt->execute([$pid]);
+            $stocks = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $remaining = $qtyCases;
+            foreach ($stocks as $stock) {
+                if ($remaining <= 0) break;
+                $deduct = min($stock['case_count'], $remaining);
+                
+                $upd = $this->pdo->prepare("UPDATE stocks SET case_count = case_count - ? WHERE id = ?");
+                $upd->execute([$deduct, $stock['id']]);
+
+                $item['batches_used'][] = ['expiry' => $stock['expiry_date'], 'cases' => $deduct];
+                $remaining -= $deduct;
+            }
+
+            if ($remaining > 0) throw new Exception("大園倉庫存不足 (ID: $pid)");
+        }
+        return $items;
+    }
+
+    private function addTaipeiStock($items) {
+        foreach ($items as $item) {
+            $pid = $item['product_id'];
+            $pStmt = $this->pdo->prepare("SELECT unit_per_case FROM products WHERE id = ?");
+            $pStmt->execute([$pid]);
+            $unitPerCase = $pStmt->fetchColumn() ?: 1;
+
+            $batches = $item['batches_used'] ?? [];
+            if (empty($batches)) {
+                // Fallback: No batch info found (Legacy or direct update)
+                // Assume 1 large batch with NO expiry
+                $qtyCases = $item['quantity'];
+                $totalUnits = $qtyCases * $unitPerCase;
+                $this->addStockEntry('TAIPEI', $pid, $totalUnits, null);
+            } else {
+                foreach ($batches as $batch) {
+                    $units = $batch['cases'] * $unitPerCase;
+                    $this->addStockEntry('TAIPEI', $pid, $units, $batch['expiry']);
+                }
+            }
+        }
+    }
+
+    private function addStockEntry($warehouse, $pid, $units, $expiry) {
+        $sql = "SELECT id FROM stocks WHERE product_id = ? AND warehouse_id = ? AND ";
+        $params = [$pid, $warehouse];
+        if ($expiry === null) {
+            $sql .= "expiry_date IS NULL";
+        } else {
+            $sql .= "expiry_date = ?";
+            $params[] = $expiry;
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+        $stockId = $stmt->fetchColumn();
+
+        if ($stockId) {
+            $upd = $this->pdo->prepare("UPDATE stocks SET unit_count = unit_count + ? WHERE id = ?");
+            $upd->execute([$units, $stockId]);
+        } else {
+            $ins = $this->pdo->prepare("INSERT INTO stocks (warehouse_id, product_id, unit_count, expiry_date, case_count) VALUES (?, ?, ?, ?, 0)");
+            $ins->execute([$warehouse, $pid, $units, $expiry]);
+        }
+    }
 
     private function handleFollow($event) {
         $this->lineBot->reply($event['replyToken'], [

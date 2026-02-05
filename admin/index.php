@@ -43,6 +43,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
     <title>📦 倉儲管理後台</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .sidebar { min-height: 100vh; background-color: #343a40; color: white; }
         .nav-link { color: rgba(255,255,255,.75); cursor: pointer; }
@@ -333,19 +334,38 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 };
 
                 const updateOrderStatus = async (orderId, status) => {
-                    if (!confirm(`確定要將訂單 #${orderId} 狀態變更為 ${status} 嗎？`)) return;
+                    const actionName = status === 'SHIPPED' ? '出貨' : (status === 'RECEIVED' ? '簽收' : '更新狀態');
                     
-                    const res = await fetch('api/update_order_status.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ order_id: orderId, status: status })
+                    const result = await Swal.fire({
+                        title: `確定要${actionName}嗎？`,
+                        text: `訂單 #${orderId} 將變更為 ${status}`,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: '確定',
+                        cancelButtonText: '取消',
+                        confirmButtonColor: '#3085d6',
+                        cancelButtonColor: '#d33'
                     });
-                    const json = await res.json();
-                    if (json.success) {
-                        alert('更新成功');
-                        fetchData();
-                    } else {
-                        alert('更新失敗: ' + json.message);
+
+                    if (result.isConfirmed) {
+                        try {
+                            Swal.showLoading();
+                            const res = await fetch('api/update_order_status.php', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ order_id: orderId, status: status })
+                            });
+                            const json = await res.json();
+                            
+                            if (json.success) {
+                                await Swal.fire('成功', `${actionName}成功！`, 'success');
+                                fetchData();
+                            } else {
+                                Swal.fire('失敗', '更新失敗: ' + json.message, 'error');
+                            }
+                        } catch (e) {
+                            Swal.fire('錯誤', '系統發生錯誤', 'error');
+                        }
                     }
                 };
 
@@ -368,7 +388,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit };
+                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit, updateOrderStatus };
             }
         }).mount('#app');
     </script>

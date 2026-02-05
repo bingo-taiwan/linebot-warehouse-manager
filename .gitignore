@@ -1,0 +1,12 @@
+# Ignore local config
+config.php
+# Ignore unstructured data
+unstructured-data/*.txt
+unstructured-data/*.jpg
+# Ignore system files
+.DS_Store
+Thumbs.db
+# Ignore logs
+*.log
+# Ignore temp files
+*.tmp
