@@ -53,19 +53,28 @@ if (!isset($_SESSION['admin_logged_in'])) {
 </head>
 <body>
     <div id="app" class="d-flex">
-        <h1 style="color:red; position:fixed; top:0; right:0; z-index:9999;">REMOTE TEST 1.3</h1>
         <!-- Sidebar -->
         <div class="sidebar p-3 d-flex flex-column flex-shrink-0" style="width: 250px;">
             <h4 class="mb-4 px-2">📦 倉儲管理 V2</h4>
             <ul class="nav nav-pills flex-column mb-auto">
                 <li class="nav-item">
-                    <a class="nav-link" :class="{active: view === 'dashboard'}" @click="view = 'dashboard'">📊 總覽與預警</a>
+                    <a class="nav-link" :class="{active: view === 'dashboard'}" @click="setView('dashboard')">📊 總覽與預警</a>
+                </li>
+                
+                <li class="nav-item mt-3 mb-1 px-2 text-white-50 small">庫存檢視</li>
+                <li>
+                    <a class="nav-link" :class="{active: view === 'inventory' && viewMode === 'TOTAL'}" @click="setView('inventory', 'TOTAL')">📋 庫存總覽</a>
                 </li>
                 <li>
-                    <a class="nav-link" :class="{active: view === 'inventory'}" @click="view = 'inventory'">🏭 庫存管理</a>
+                    <a class="nav-link" :class="{active: view === 'inventory' && viewMode === 'DAYUAN'}" @click="setView('inventory', 'DAYUAN')">🏢 大園倉庫存</a>
                 </li>
                 <li>
-                    <a class="nav-link" :class="{active: view === 'reports'}" @click="view = 'reports'">📑 報表中心</a>
+                    <a class="nav-link" :class="{active: view === 'inventory' && viewMode === 'TAIPEI'}" @click="setView('inventory', 'TAIPEI')">🏙️ 台北倉庫存</a>
+                </li>
+
+                <li class="nav-item mt-3 mb-1 px-2 text-white-50 small">營運管理</li>
+                <li>
+                    <a class="nav-link" :class="{active: view === 'reports'}" @click="setView('reports')">📑 訂單報表</a>
                 </li>
                 <li>
                     <a class="nav-link" :class="{active: view === 'benefit'}" @click="view = 'benefit'">🎁 福利品紀錄</a>
@@ -74,7 +83,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     <a class="nav-link" href="users.php?bot=warehouse">👥 用戶權限</a>
                 </li>
             </ul>
-            <div class="mt-auto p-2 text-white-50 small">Version 1.2</div>
+            <div class="mt-auto p-2 text-white-50 small">Version 1.3.1</div>
         </div>
 
         <!-- Content -->
