@@ -69,8 +69,11 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 <li>
                     <a class="nav-link" :class="{active: view === 'benefit'}" @click="view = 'benefit'">🎁 福利品紀錄</a>
                 </li>
+                <li>
+                    <a class="nav-link" href="users.php?bot=warehouse">👥 用戶權限</a>
+                </li>
             </ul>
-            <div class="mt-auto p-2 text-white-50 small">Version 1.1</div>
+            <div class="mt-auto p-2 text-white-50 small">Version 1.2</div>
         </div>
 
         <!-- Content -->
