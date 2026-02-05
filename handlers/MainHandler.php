@@ -90,13 +90,54 @@ class MainHandler {
             }
         }
 
-        if ($text === '庫存' || $text === '查詢') {
+        if (in_array(strtolower($text), ['menu', '選單', 'help', '?', '幫助'])) {
+            $this->replyMenu($event['replyToken'], $user);
+        } elseif ($text === '庫存' || $text === '查詢') {
             $this->replyStockSummary($event['replyToken'], $user);
         } else {
-            $this->lineBot->reply($event['replyToken'], [
-                ['type' => 'text', 'text' => "您好 {$user['name']}！目前我能幫您查詢庫存。"]
-            ]);
+            // 預設回覆選單
+            $this->replyMenu($event['replyToken'], $user);
         }
+    }
+
+    private function replyMenu($replyToken, $user) {
+        $role = $user['role'];
+        $name = $user['name'];
+        $roleName = '訪客';
+        $buttons = [];
+
+        // 定義連結
+        $liffBase = "https://lt4.mynet.com.tw/linebot/warehouse/liff";
+        $adminBase = "https://lt4.mynet.com.tw/linebot/warehouse/admin";
+
+        if ($role === 'ADMIN_WAREHOUSE') {
+            $roleName = '倉管人員';
+            $buttons[] = FlexBuilder::button('📊 庫存查詢', FlexBuilder::postbackAction('庫存查詢', 'action=view_stock'), 'primary');
+            $buttons[] = FlexBuilder::button('🚚 大園補貨 (調撥)', FlexBuilder::uriAction('大園補貨', "$liffBase/restock_dayuan.php"), 'secondary');
+            $buttons[] = FlexBuilder::button('🏭 台北入庫 (新品)', FlexBuilder::uriAction('台北入庫', "$liffBase/add_stock.php"), 'secondary');
+            $buttons[] = FlexBuilder::button('📦 訂單/後台管理', FlexBuilder::uriAction('後台管理', "$adminBase/"), 'secondary');
+        } elseif ($role === 'ADMIN_OFFICE') {
+            $roleName = '行政人員';
+            $buttons[] = FlexBuilder::button('📊 台北庫存查詢', FlexBuilder::postbackAction('台北庫存', 'action=view_stock&wh=TAIPEI'), 'primary');
+            $buttons[] = FlexBuilder::button('🚚 申請調撥', FlexBuilder::uriAction('申請調撥', "$liffBase/restock_dayuan.php"), 'secondary');
+            $buttons[] = FlexBuilder::button('🎁 福利品下單', FlexBuilder::uriAction('福利品下單', "$liffBase/benefit_cart.php"), 'secondary');
+            $buttons[] = FlexBuilder::button('👥 用戶權限管理', FlexBuilder::uriAction('用戶權限', "$adminBase/users.php?bot=warehouse"), 'secondary');
+        } elseif ($role === 'SALES_LECTURER') {
+            $roleName = '業務講師';
+            $buttons[] = FlexBuilder::button('🎁 福利品專區', FlexBuilder::uriAction('福利品專區', "$liffBase/benefit_cart.php"), 'primary');
+            // $buttons[] = FlexBuilder::button('🛒 我的訂單', FlexBuilder::uriAction('我的訂單', "$liffBase/my_orders.php"), 'secondary');
+        } else {
+            $buttons[] = FlexBuilder::text("您目前為訪客身份，請聯繫管理員開通權限。", ['align' => 'center', 'color' => '#666666']);
+        }
+
+        $body = FlexBuilder::vbox(array_merge([
+            FlexBuilder::text("👤 {$name} ({$roleName})", ['weight' => 'bold', 'size' => 'md', 'color' => '#1DB446']),
+            FlexBuilder::separator('md'),
+            FlexBuilder::text("請選擇功能：", ['size' => 'xs', 'color' => '#aaaaaa', 'margin' => 'md'])
+        ], $buttons), ['spacing' => 'md']);
+
+        $bubble = FlexBuilder::bubble($body);
+        $this->lineBot->replyFlex($replyToken, "功能選單", $bubble);
     }
 
     private function handleImageMessage($event) {
