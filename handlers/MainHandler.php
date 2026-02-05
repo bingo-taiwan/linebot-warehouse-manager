@@ -226,7 +226,7 @@ class MainHandler {
 
             $body = FlexBuilder::vbox([
                 FlexBuilder::text("🚚 貨物運送中 #{$orderId}", ['weight' => 'bold', 'size' => 'lg', 'color' => '#F57C00']),
-                FlexBuilder::separator(['margin' => 'md']),
+                FlexBuilder::separator('md'),
                 FlexBuilder::text("大園倉已出貨，收到貨物後請點擊簽收。", ['wrap' => true, 'size' => 'sm']),
                 FlexBuilder::button(
                     "📥 確認簽收 (入台北庫存)",

@@ -66,7 +66,7 @@ try {
 
     $body = FlexBuilder::vbox([
         FlexBuilder::text("🚛 補貨申請單 #{$orderId}", ['weight' => 'bold', 'size' => 'lg', 'color' => '#1565C0']),
-        FlexBuilder::separator(['margin' => 'md']),
+        FlexBuilder::separator('md'),
         FlexBuilder::text("台北倉申請調撥，請大園倉確認庫存並出貨。", ['wrap' => true, 'size' => 'sm']),
         FlexBuilder::button(
             "📦 確認出貨 (扣大園庫存)",
