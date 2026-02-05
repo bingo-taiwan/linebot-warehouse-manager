@@ -1,7 +1,10 @@
 <?php
 /**
- * LINE Bot Dashboard - 使用者紀錄 (支援權限修改)
+ * LINE Bot Dashboard - 使用者紀錄 (整合資料庫與 Analytics 版)
  */
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+
 date_default_timezone_set('Asia/Taipei');
 require_once '/home/lt4.mynet.com.tw/linebot_core/Analytics.php';
 
@@ -35,82 +38,56 @@ $botConfigs = [
         'name' => '倉管小幫手',
         'path' => '/home/lt4.mynet.com.tw/public_html/linebot/warehouse',
         'config' => '/home/lt4.mynet.com.tw/public_html/linebot/warehouse/config.php',
-        'has_rbac' => true, // 標記此 Bot 具備權限管理
+        'has_rbac' => true,
     ],
 ];
 
 if (!isset($botConfigs[$botId])) die('Invalid bot');
 $botConfig = $botConfigs[$botId];
 
-// 讀取設定與 Access Token
 $accessToken = null;
 $dbConfig = null;
 
-function extractToken($filePath) {
-    if (!file_exists($filePath)) return null;
-    $content = file_get_contents($filePath);
-    // 匹配 'access_token' => '...'
-    if (preg_match("/['\"]access_token['\"]\s*=>\s*['\"]([^'\"]+)['\"]/", $content, $matches)) return $matches[1];
-    // 匹配 $channelAccessToken = '...'
-    if (preg_match("/\\$(channelAccessToken|accessToken|channel_access_token)\s*=\s*['\"]([^'\"]+)['\"]/", $content, $matches)) return $matches[2];
-    return null;
-}
-
 if (file_exists($botConfig['config'])) {
-    $includedData = @include $botConfig['config'];
-    if (is_array($includedData)) {
-        $config = $includedData;
-    }
-
-    // 嘗試從變數中抓取 (支援多種命名)
-    if (isset($config['line']['access_token'])) $accessToken = $config['line']['access_token'];
-    elseif (isset($config['channelAccessToken'])) $accessToken = $config['channelAccessToken'];
-    elseif (isset($channelAccessToken)) $accessToken = $channelAccessToken;
-    elseif (isset($channel_access_token)) $accessToken = $channel_access_token;
-    elseif (isset($accessToken)) $accessToken = $accessToken;
-
-    // 若 include 沒抓到，暴力讀檔 Regex
-    if (!$accessToken) $accessToken = extractToken($botConfig['config']);
-}
-
-// Fallback: 如果設定檔沒抓到，嘗試從 index.php 抓取 (針對舊版 Bot)
-if (!$accessToken) {
-    $indexPath = $botConfig['path'] . '/index.php';
-    $accessToken = extractToken($indexPath);
-    
-    // 如果還是沒有，試試 webhook.php
-    if (!$accessToken) {
-        $accessToken = extractToken($botConfig['path'] . '/webhook.php');
+    $loadConfig = function($file) { return include $file; };
+    $res = $loadConfig($botConfig['config']);
+    if (is_array($res)) {
+        $accessToken = $res['line']['access_token'] ?? null;
+        $dbConfig = $res['db']['mysql'] ?? null;
+    } else {
+        if (defined('LINE_CHANNEL_ACCESS_TOKEN')) $accessToken = LINE_CHANNEL_ACCESS_TOKEN;
+        global $LINE_BOTS;
+        if (!$accessToken && isset($LINE_BOTS[$botId]['token'])) $accessToken = $LINE_BOTS[$botId]['token'];
     }
 }
 
-// EMERGENCY FIX: Hardcode Dietitian Token
-// 由於 Dietitian 的路徑結構特殊導致自動抓取失敗，為確保功能正常，直接指定 Token
+// 緊急備援 Token
 if ($botId === 'dietitian' && !$accessToken) {
     $accessToken = 'smn7CARL0U9NnuTNIx/tHNgK54q7t/mTcLZTdM/QdLkctKEYCrmuRiaze5Q16RfAnwl5bbbVjhQZVbIGfnKF+biYibAsxxfkXAlx/ECgU9EGuxnkE+6X4CPiAGpgQWdoj4mmuhAdmZgy42fOqeDwGQdB04t89/1O/w1cDnyilFU=';
+} elseif ($botId === 'warehouse' && !$accessToken) {
+    $accessToken = 'iOsTyK8KuXZCkl0Lt2ZHg2DKcfX1JD3xCBaKUTp6pJo/qTg0XGVNEgeCz3m2YgLzirbMx9lqP9U5dAmB9iSfEP6yXLlWcUDCHpCfeAVBxQ56Lzd4BS+8WpTEf+6thCAvt366j8mSxqJTJvQXR0ri4gdB04t89/1O/w1cDnyilFU=';
 }
 
-// DB Config
-if (isset($config['db']['mysql'])) {
-    $dbConfig = $config['db']['mysql'];
-}
+// 取得 Analytics 統計
+$analytics = new Analytics($botId, $botConfig['path'] . '/data');
+$analyticsUsers = $analytics->getAllUsers();
 
-// 取得資料庫角色 (如果是 warehouse)
-
-// 取得資料庫角色 (如果是 warehouse)
-$dbRoles = [];
-if ($botId === 'warehouse' && $dbConfig) {
+// 取得資料庫用戶與角色
+$dbUsers = [];
+if (isset($botConfig['has_rbac']) && $dbConfig) {
     try {
         $pdo = new PDO("mysql:host={$dbConfig['host']};dbname={$dbConfig['database']};charset={$dbConfig['charset']}", $dbConfig['username'], $dbConfig['password']);
-        $stmt = $pdo->query("SELECT line_user_id, name as db_name, role, is_active FROM users");
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $dbRoles[$row['line_user_id']] = $row;
+        $stmt = $pdo->query("SELECT line_user_id, name as db_name, role FROM users");
+        if ($stmt) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $dbUsers[$row['line_user_id']] = $row;
+            }
         }
-    } catch (Exception $e) {}
+    } catch (Throwable $t) {}
 }
 
-$analytics = new Analytics($botId, $botConfig['path'] . '/data');
-$users = $analytics->getAllUsers();
+// 彙整清單：Analytics + DB (聯集)
+$allUserIds = array_unique(array_merge(array_keys($analyticsUsers), array_keys($dbUsers)));
 
 function getLineProfile($userId, $accessToken, $cacheDir) {
     if (!$accessToken) return null;
@@ -132,15 +109,16 @@ function getLineProfile($userId, $accessToken, $cacheDir) {
 }
 
 $userProfiles = [];
-foreach ($users as $userId => $userStats) {
+foreach ($allUserIds as $userId) {
     $profile = getLineProfile($userId, $accessToken, $cacheDir);
-    $roleInfo = $dbRoles[$userId] ?? ['role' => 'guest', 'is_active' => 0, 'db_name' => ''];
+    $stats = $analyticsUsers[$userId] ?? ['total_requests' => 0, 'active_days' => 0];
+    $roleInfo = $dbUsers[$userId] ?? ['role' => 'guest', 'db_name' => ''];
+    
     $userProfiles[$userId] = [
-        'stats' => $userStats,
+        'stats' => $stats,
         'profile' => $profile,
         'role' => $roleInfo['role'],
-        'db_name' => $roleInfo['db_name'],
-        'is_active' => $roleInfo['is_active']
+        'db_name' => $roleInfo['db_name']
     ];
 }
 ?>
@@ -170,10 +148,9 @@ foreach ($users as $userId => $userStats) {
         .stat-item .value { font-weight: bold; color: #00B900; }
         .stat-item .label { font-size: 10px; color: #666; }
         .detail-link { color: #00B900; text-decoration: none; font-size: 13px; font-weight: bold; margin-left: 10px; }
-        
         @media (max-width: 768px) {
             .user-card { flex-direction: column; align-items: flex-start; }
-            .user-stats { width: 100%; justify-content: space-around; margin-top: 10px; border-top: 1px solid #eee; pt: 10px; }
+            .user-stats { width: 100%; justify-content: space-around; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
             .user-role-box { width: 100%; margin-top: 10px; }
         }
     </style>
@@ -191,8 +168,12 @@ foreach ($users as $userId => $userStats) {
             <?php endforeach; ?>
         </div>
 
+        <?php if (empty($userProfiles)): ?>
+            <div style="text-align:center; padding:50px; color:#999; background:white; border-radius:12px;">尚無使用者資料</div>
+        <?php endif; ?>
+
         <?php foreach ($userProfiles as $userId => $data): 
-            $displayName = $data['profile']['displayName'] ?? $data['db_name'] ?? '未知使用者';
+            $displayName = $data['profile']['displayName'] ?? $data['db_name'] ?? '新使用者';
             $pictureUrl = $data['profile']['pictureUrl'] ?? null;
         ?>
         <div class="user-card">
@@ -237,24 +218,15 @@ foreach ($users as $userId => $userStats) {
     <script>
     function updateRole(userId, newRole) {
         if (!confirm('確定要更改此用戶的權限嗎？')) return;
-        
         fetch('api/update_user_role.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                bot: '<?= $botId ?>',
-                user_id: userId,
-                role: newRole
-            })
+            body: JSON.stringify({ bot: '<?= $botId ?>', user_id: userId, role: newRole })
         })
         .then(res => res.json())
         .then(data => {
-            if (data.success) {
-                alert('權限已更新');
-                location.reload();
-            } else {
-                alert('更新失敗: ' + data.message);
-            }
+            if (data.success) { alert('權限已更新'); location.reload(); }
+            else { alert('更新失敗: ' + data.message); }
         });
     }
     </script>
