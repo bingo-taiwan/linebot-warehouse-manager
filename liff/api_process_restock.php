@@ -20,8 +20,8 @@ try {
         throw new Exception("無調撥內容");
     }
 
-    // TODO: 這裡未來應從 LIFF 獲取真實 userId，暫用管理員 ID
-    $userId = 'U004f8cad542e37c7834a3920e60d1077'; 
+    // 從輸入取得下單者 ID (應由 LIFF 傳入)
+    $requesterId = $input['userId'] ?? 'U004f8cad542e37c7834a3920e60d1077'; 
 
     $pdo->beginTransaction();
 
@@ -43,7 +43,7 @@ try {
     $stmt = $pdo->prepare("INSERT INTO orders (order_type, requester_id, items_json, status) VALUES (?, ?, ?, ?)");
     $stmt->execute([
         'DAYUAN_ORDER',
-        $userId,
+        $requesterId,
         json_encode($input['items'], JSON_UNESCAPED_UNICODE),
         'PENDING'
     ]);
@@ -51,7 +51,17 @@ try {
 
     $pdo->commit();
 
-    // 3. 發送通知給倉管 (含簽收按鈕)
+    // 3. 獲取所有需要接收通知的管理員
+    $adminStmt = $pdo->prepare("SELECT line_user_id FROM users WHERE role IN ('ADMIN_WAREHOUSE', 'ADMIN_OFFICE') AND is_active = 1");
+    $adminStmt->execute();
+    $adminIds = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($adminIds)) {
+        // 如果沒人有權限，至少傳給下單者自己
+        $adminIds = [$requesterId];
+    }
+
+    // 4. 發送通知給倉管 (含簽收按鈕)
     $lineBot = new LineBot($config['line']);
 
     $body = FlexBuilder::vbox([
@@ -65,9 +75,13 @@ try {
         )
     ], ['spacing' => 'md']);
 
-    $lineBot->push($userId, [
+    $pushMessages = [
         ['type' => 'flex', 'altText' => "補貨申請單 #{$orderId}", 'contents' => FlexBuilder::bubble($body)]
-    ]);
+    ];
+
+    foreach ($adminIds as $targetId) {
+        $lineBot->push($targetId, $pushMessages);
+    }
 
     echo json_encode(['success' => true, 'order_id' => $orderId]);
 

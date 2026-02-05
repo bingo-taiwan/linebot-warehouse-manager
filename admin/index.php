@@ -197,15 +197,26 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 <div class="card shadow-sm">
                     <div class="card-body p-0">
                         <table class="table table-hover mb-0">
-                            <thead><tr><th>#</th><th>類型</th><th>申請人</th><th>內容</th><th>狀態</th><th>時間</th></tr></thead>
+                            <thead><tr><th>#</th><th>類型</th><th>申請人</th><th>內容</th><th>狀態</th><th>操作</th><th>時間</th></tr></thead>
                             <tbody>
                                 <tr v-for="o in orders" :key="o.id">
                                     <td>{{ o.id }}</td>
                                     <td><span class="badge bg-secondary">{{ o.order_type }}</span></td>
                                     <td>{{ o.requester_name }}</td>
-                                    <td class="small text-truncate" style="max-width: 200px;">{{ o.items_display }}</td>
+                                    <td>
+                                        <div class="small">
+                                            <div v-for="item in JSON.parse(o.items_json)" :key="item.product_id">
+                                                • {{ item.product_name || ('ID:' + item.product_id) }}: {{ item.quantity }} 箱
+                                            </div>
+                                        </div>
+                                    </td>
                                     <td>
                                         <span class="badge" :class="statusClass(o.status)">{{ o.status }}</span>
+                                    </td>
+                                    <td>
+                                        <button v-if="o.status === 'PENDING'" @click="updateOrderStatus(o.id, 'SHIPPED')" class="btn btn-sm btn-outline-primary">🚚 出貨</button>
+                                        <button v-if="o.status === 'SHIPPED'" @click="updateOrderStatus(o.id, 'RECEIVED')" class="btn btn-sm btn-outline-success">✅ 簽收</button>
+                                        <span v-else-if="o.status === 'RECEIVED'" class="text-success small">已完成</span>
                                     </td>
                                     <td class="small">{{ o.created_at }}</td>
                                 </tr>
@@ -321,8 +332,26 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     }
                 };
 
+                const updateOrderStatus = async (orderId, status) => {
+                    if (!confirm(`確定要將訂單 #${orderId} 狀態變更為 ${status} 嗎？`)) return;
+                    
+                    const res = await fetch('api/update_order_status.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order_id: orderId, status: status })
+                    });
+                    const json = await res.json();
+                    if (json.success) {
+                        alert('更新成功');
+                        fetchData();
+                    } else {
+                        alert('更新失敗: ' + json.message);
+                    }
+                };
+
                 const statusClass = (s) => {
                     if (s === 'PENDING') return 'bg-warning text-dark';
+                    if (s === 'SHIPPED') return 'bg-info text-dark';
                     if (s === 'RECEIVED') return 'bg-success';
                     return 'bg-secondary';
                 };

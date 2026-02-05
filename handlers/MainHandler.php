@@ -121,9 +121,14 @@ class MainHandler {
             $sessionData = ['image_path' => $savePath, 'timestamp' => time()];
             file_put_contents(__DIR__ . '/../data/session_' . $event['source']['userId'] . '.json', json_encode($sessionData));
             
-            $this->lineBot->replyText($event['replyToken'], "📸 圖片已接收！\n請輸入指令指定用途：\n\n『A 產品名稱』\n(例如：A 弧形半圓沙發)\n\n系統將自動處理圖片並設為該產品封面。");
+            $debugMsg = "📸 圖片已接收！\n";
+            $debugMsg .= "ID: {$messageId}\n";
+            $debugMsg .= "File: {$filename}\n\n";
+            $debugMsg .= "請輸入指令指定用途：\n『A 產品名稱』(更新產品圖片)";
+            
+            $this->lineBot->replyText($event['replyToken'], $debugMsg);
         } else {
-            $this->lineBot->replyText($event['replyToken'], "⚠️ 圖片下載失敗。");
+            $this->lineBot->replyText($event['replyToken'], "⚠️ 圖片下載失敗 (ID: {$messageId})");
         }
     }
 
