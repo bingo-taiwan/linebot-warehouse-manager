@@ -61,16 +61,16 @@ try {
         $adminIds = [$requesterId];
     }
 
-    // 4. 發送通知給倉管 (含簽收按鈕)
+    // 4. 發送通知給倉管 (大園出貨)
     $lineBot = new LineBot($config['line']);
 
     $body = FlexBuilder::vbox([
         FlexBuilder::text("🚛 補貨申請單 #{$orderId}", ['weight' => 'bold', 'size' => 'lg', 'color' => '#1565C0']),
         FlexBuilder::separator(['margin' => 'md']),
-        FlexBuilder::text("台北倉申請調撥，請大園倉備貨。", ['wrap' => true, 'size' => 'sm']),
+        FlexBuilder::text("台北倉申請調撥，請大園倉確認庫存並出貨。", ['wrap' => true, 'size' => 'sm']),
         FlexBuilder::button(
-            "確認貨物送達 (簽收)",
-            ['type' => 'postback', 'data' => "action=confirm_receipt&order_id={$orderId}", 'displayText' => '確認收到大園倉貨物'],
+            "📦 確認出貨 (扣大園庫存)",
+            ['type' => 'postback', 'data' => "action=ship_order&order_id={$orderId}", 'displayText' => "訂單 #{$orderId} 確認出貨"],
             'primary'
         )
     ], ['spacing' => 'md']);

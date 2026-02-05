@@ -181,8 +181,69 @@ class MainHandler {
         } elseif ($action === 'view_stock') {
             $whParam = $query['wh'] ?? null;
             $this->replyStockSummary($event['replyToken'], '產品', $whParam);
+        } elseif ($action === 'ship_order') {
+            $this->handleShipOrder($event, $user, $query['order_id']);
         } elseif ($action === 'confirm_receipt') {
             $this->handleConfirmReceipt($event, $user, $query['order_id']);
+        }
+    }
+
+    private function handleShipOrder($event, $user, $orderId) {
+        try {
+            $this->pdo->beginTransaction();
+
+            $stmt = $this->pdo->prepare("SELECT * FROM orders WHERE id = ? FOR UPDATE");
+            $stmt->execute([$orderId]);
+            $order = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$order) throw new Exception("訂單不存在");
+            if ($order['status'] !== 'PENDING') {
+                $this->lineBot->replyText($event['replyToken'], "此訂單狀態非待處理 ({$order['status']})，無法出貨。");
+                $this->pdo->rollBack();
+                return;
+            }
+
+            $items = json_decode($order['items_json'], true);
+
+            // 1. 扣除大園庫存
+            $items = $this->deductDayuanStock($items);
+            
+            // 更新 items_json (包含使用的批次資訊)
+            $json = json_encode($items, JSON_UNESCAPED_UNICODE);
+            $u = $this->pdo->prepare("UPDATE orders SET items_json = ?, status = 'SHIPPED', ship_date = CURDATE() WHERE id = ?");
+            $u->execute([$json, $orderId]);
+
+            $this->pdo->commit();
+
+            // 2. 回覆操作者
+            $this->lineBot->replyText($event['replyToken'], "✅ 訂單 #{$orderId} 已出貨！\n大園庫存已扣除。正在通知台北倉簽收...");
+
+            // 3. 通知台北倉 (ADMIN_OFFICE & ADMIN_WAREHOUSE)
+            // 這裡發送給所有相關管理員
+            $adminStmt = $this->pdo->prepare("SELECT line_user_id FROM users WHERE role IN ('ADMIN_WAREHOUSE', 'ADMIN_OFFICE') AND is_active = 1");
+            $adminStmt->execute();
+            $adminIds = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            $body = FlexBuilder::vbox([
+                FlexBuilder::text("🚚 貨物運送中 #{$orderId}", ['weight' => 'bold', 'size' => 'lg', 'color' => '#F57C00']),
+                FlexBuilder::separator(['margin' => 'md']),
+                FlexBuilder::text("大園倉已出貨，收到貨物後請點擊簽收。", ['wrap' => true, 'size' => 'sm']),
+                FlexBuilder::button(
+                    "📥 確認簽收 (入台北庫存)",
+                    ['type' => 'postback', 'data' => "action=confirm_receipt&order_id={$orderId}", 'displayText' => "訂單 #{$orderId} 確認簽收"],
+                    'primary'
+                )
+            ], ['spacing' => 'md']);
+
+            $pushMessages = [['type' => 'flex', 'altText' => "貨物運送通知 #{$orderId}", 'contents' => FlexBuilder::bubble($body)]];
+            
+            foreach ($adminIds as $targetId) {
+                $this->lineBot->push($targetId, $pushMessages);
+            }
+
+        } catch (Exception $e) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            $this->lineBot->replyText($event['replyToken'], "❌ 出貨失敗：\n" . $e->getMessage());
         }
     }
 
@@ -200,25 +261,16 @@ class MainHandler {
                 $this->pdo->rollBack();
                 return;
             }
+            if ($order['status'] !== 'SHIPPED') {
+                $this->lineBot->replyText($event['replyToken'], "訂單尚未出貨，無法簽收 (狀態: {$order['status']})。");
+                $this->pdo->rollBack();
+                return;
+            }
 
             $items = json_decode($order['items_json'], true);
-            $status = $order['status'];
 
-            // 1. Stock Logic
-            if ($status === 'PENDING') {
-                // Deduct Dayuan & Add Taipei
-                $items = $this->deductDayuanStock($items);
-                
-                // Save batch info
-                $json = json_encode($items, JSON_UNESCAPED_UNICODE);
-                $u = $this->pdo->prepare("UPDATE orders SET items_json = ? WHERE id = ?");
-                $u->execute([$json, $orderId]);
-                
-                $this->addTaipeiStock($items);
-            } elseif ($status === 'SHIPPED') {
-                // Only Add Taipei (Dayuan already deducted)
-                $this->addTaipeiStock($items);
-            }
+            // 1. 增加台北庫存 (Dayuan already deducted in ship step)
+            $this->addTaipeiStock($items);
 
             // 2. Update Status
             $upd = $this->pdo->prepare("UPDATE orders SET status = 'RECEIVED', receive_date = CURDATE(), updated_at = CURRENT_TIMESTAMP WHERE id = ?");
@@ -226,7 +278,7 @@ class MainHandler {
 
             $this->pdo->commit();
 
-            $this->lineBot->replyText($event['replyToken'], "✅ 訂單 #{$orderId} 已確認簽收！\n庫存已更新至台北倉。");
+            $this->lineBot->replyText($event['replyToken'], "✅ 訂單 #{$orderId} 已確認簽收！\n庫存已加入台北倉。");
 
         } catch (Exception $e) {
             if ($this->pdo->inTransaction()) $this->pdo->rollBack();
