@@ -286,6 +286,11 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 const filterCategory = ref('ALL');
                 const benefitMonth = ref(new Date().toISOString().slice(0, 7));
 
+                const setView = (v, mode = 'TOTAL') => {
+                    view.value = v;
+                    viewMode.value = mode;
+                };
+
                 const filteredInventory = computed(() => {
                     if (filterCategory.value === 'ALL') return inventory.value;
                     return inventory.value.filter(p => p.category === filterCategory.value);
@@ -391,7 +396,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, viewMode, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit, updateOrderStatus };
+                return { view, viewMode, setView, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit, updateOrderStatus };
             }
         }).mount('#app');
     </script>
