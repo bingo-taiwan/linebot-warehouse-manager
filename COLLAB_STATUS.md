@@ -10,6 +10,11 @@
     - 檔案：`admin/users.php`, `admin/api/update_user_role.php`
     - 功能：支援直接在網頁下拉選單修改用戶權限（ADMIN_WAREHOUSE, ADMIN_OFFICE, SALES_LECTURER）。
     - 核心優化：**混合資料來源 (Hybrid Data Source)**。合併 Analytics JSON 紀錄與 MySQL `users` 表，解決若無互動紀錄則看不到用戶的問題。
+    - 兼容性：支援 Dietitian 的 `define()` 常數模式與 Warehouse 的 `return array()` 模式。
+3.  **數據恢復與校正**：
+    - 檔案：`warehouse/data/analytics.json`
+    - 行動：依照用戶截圖恢復統計數。管理員 U004f8cad... 已校正為 280 次請求、8 天活躍。
+    - 技術細節：補齊 `user_history` 日期 Key 確保 `Analytics.php` 的 `getAllUsers()` 遍歷不跳過。
 3.  **下單通知邏輯修正**：
     - 檔案：`liff/api_process_restock.php`
     - 修正：不再寫死 User ID，現在會查詢所有具管理權限的人並發送 Flex Message 通知。
