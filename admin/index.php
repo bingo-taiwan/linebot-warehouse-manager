@@ -178,7 +178,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                         <div v-if="p.unit_per_case > 1">({{ p.unit_per_case }}{{ getUnit(p.name, p.spec) }}/箱)</div>
                                     </td>
                                     <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'DAYUAN'" :class="{'text-danger fw-bold': parseInt(p.dayuan_stock) < parseInt(p.alert_threshold_cases)}">
-                                        {{ p.dayuan_stock }} <span class="small text-muted">{{ p.unit_per_case == 1 ? getUnit(p.name, p.spec) : '箱' }}</span>
+                                        {{ p.dayuan_stock }} <span class="small text-muted">箱</span>
+                                        <div v-if="p.dayuan_stock_units > 0" class="small text-muted">+ {{ p.dayuan_stock_units }} {{ getUnit(p.name, p.spec) }}</div>
                                         <div v-if="p.dayuan_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
                                             <div v-for="exp in (p.dayuan_expiry ? p.dayuan_expiry.split(', ') : [])" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
                                                 {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
@@ -186,7 +187,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                         </div>
                                     </td>
                                     <td class="text-center" v-if="viewMode === 'TOTAL' || viewMode === 'TAIPEI'" :class="{'text-danger fw-bold': parseInt(p.taipei_stock) < parseInt(p.alert_threshold_units)}">
-                                        {{ p.taipei_stock }} <span class="small text-muted">{{ getUnit(p.name, p.spec) }}</span>
+                                        {{ formatTaipeiStock(p.taipei_stock, p.spec, p.name) }}
                                         <div v-if="p.taipei_expiry" class="mt-1 border-top pt-1" style="font-size: 0.75rem;">
                                             <div v-for="exp in (p.taipei_expiry ? p.taipei_expiry.split(', ') : [])" :key="exp" :class="{'text-danger fw-bold': isExpired(exp.split(':')[0])}" class="text-muted text-nowrap">
                                                 {{ exp.split(':')[0] }} ({{ exp.split(':')[1] }})
@@ -323,6 +324,26 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     return '單位';
                 };
 
+                const formatTaipeiStock = (val, spec, name) => {
+                    val = parseInt(val) || 0;
+                    const unit = getUnit(name, spec);
+                    
+                    let rate = 1;
+                    const match = spec ? spec.match(/(\d+)[^\d\/]*\/[盒瓶罐]/) : null;
+                    if (match) rate = parseInt(match[1]);
+                    
+                    if (rate > 1) {
+                        const boxes = Math.floor(val / rate);
+                        const loose = val % rate;
+                        let text = "";
+                        if (boxes > 0) text += `${boxes} 盒`;
+                        if (loose > 0) text += ` ${loose} ${unit}`;
+                        if (text === "") text = "0";
+                        return text;
+                    }
+                    return `${val} ${unit}`;
+                };
+
                 const fetchData = async () => {
                     // Get Stats & Inventory
                     const res1 = await fetch('api/get_dashboard_stats.php');
@@ -404,7 +425,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 // Auto refresh every 60s
                 setInterval(fetchData, 60000);
 
-                return { view, viewMode, setView, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit, updateOrderStatus };
+                return { view, viewMode, setView, stats, inventory, alerts, orders, fetchData, statusClass, filterCategory, filteredInventory, benefitMonth, fetchBenefitLogs, benefitLogs, totalBenefitAmount, isExpired, getUnit, formatTaipeiStock, updateOrderStatus };
             }
         }).mount('#app');
     </script>
