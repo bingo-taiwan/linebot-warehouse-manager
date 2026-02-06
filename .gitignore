@@ -10,3 +10,10 @@ Thumbs.db
 *.log
 # Ignore temp files
 *.tmp
+# Ignore Firecrawl output
+.firecrawl/
+# Ignore temp scripts
+scripts/test_*.php
+scripts/verify_*.php
+scripts/*.sql
+admin/debug_vue.php
