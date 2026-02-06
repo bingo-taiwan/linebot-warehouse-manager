@@ -81,7 +81,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 </li>
 
             </ul>
-            <div class="mt-auto p-2 text-white-50 small">Version 1.3.2</div>
+            <div class="mt-auto p-2 text-white-50 small">Version 1.4.0</div>
         </div>
 
         <!-- Content -->
