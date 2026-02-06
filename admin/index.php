@@ -22,7 +22,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
     </head>
     <body class="d-flex align-items-center justify-content-center vh-100 bg-light">
         <div class="card p-4 shadow" style="width: 350px;">
-            <h4 class="text-center mb-4">倉管後台登入</h4>
+            <h4 class="text-center mb-4">倉管後台登入 (v1.3.2-Verify)</h4>
             <?php if (isset($error)) echo "<div class='alert alert-danger'>$error</div>"; ?>
             <form method="post">
                 <input type="password" name="password" class="form-control mb-3" placeholder="請輸入管理員密碼" required>
