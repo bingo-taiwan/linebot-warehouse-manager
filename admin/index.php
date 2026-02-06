@@ -293,12 +293,11 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                             const filterCategory = ref('ALL');
                                             const benefitMonth = ref(new Date().toISOString().slice(0, 7));
                             
-                                                            const setView = (v, mode = 'TOTAL') => {
-                                                                // alert('Debug: ' + v + ' ' + mode); // Debug
-                                                                view.value = v;
-                                                                viewMode.value = mode;
-                                                            };                            
-                                            const filteredInventory = computed(() => {
+                                                                            const setView = (v, mode = 'TOTAL') => {
+                                                                                alert('Debug: ' + v + ' ' + mode); // Debug Enabled
+                                                                                view.value = v;
+                                                                                viewMode.value = mode;
+                                                                            };                                            const filteredInventory = computed(() => {
                                                 if (filterCategory.value === 'ALL') return inventory.value;
                                                 return inventory.value.filter(p => p.category === filterCategory.value);
                                             });
